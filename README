@@ -1,0 +1,13 @@
+GONZBEE
+
+Gonzbee is intended to be a replacement for SABnzbd+, written in go
+
+This project is mainly my sandbox in which I write go code. The multiple
+threads of downloading, assembly of files and handling multiple concurrent
+jobs, seemed like a perfect problem space to use the concurrency features in go
+
+Note: at the moment this is just a couple of simple packages. The nzb package
+handles marshalling NZB xml files into a data structure. The nntp package, is 
+a simple wrapper for the nntp protocol. the yenc package is a simple yEnc
+decoder which is geared towards letting the users of the package be responsible
+for how they want to handle data.
