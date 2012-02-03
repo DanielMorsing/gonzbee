@@ -41,6 +41,27 @@ type Nzb struct {
 	File []File `xml:"file"`
 }
 
+//Parse Nzb returns a pointer to a filled in Nzb struct, with the xml
+//document that it reads from r.
+//If there is an error, n will be nil and err will be non-nil
+func ParseNzb(r io.Reader) (n *Nzb, err error) {
+	parser := xml.NewDecoder(r)
+	parser.CharsetReader = charsetter
+
+	n = new(Nzb)
+	err = parser.DecodeElement(n, nil)
+	if err != nil {
+		err = errors.New(fmt.Sprintf("Could not parse NZB XML: %s", err.Error()))
+		return nil, err
+	}
+	err = validate(n)
+	if err != nil {
+		err = errors.New(fmt.Sprintf("Invalid NZB file: %s", err.Error()))
+		return nil, err
+	}
+	return n, nil
+}
+
 type charsetReader struct {
 	reader    *bufio.Reader
 	remainder []byte
@@ -100,25 +121,4 @@ func validate(n *Nzb) error {
 		}
 	}
 	return nil
-}
-
-//Parse Nzb returns a pointer to a filled in Nzb struct, with the xml
-//document that it reads from r.
-//If there is an error, n will be nil and err will be non-nil
-func ParseNzb(r io.Reader) (n *Nzb, err error) {
-	parser := xml.NewDecoder(r)
-	parser.CharsetReader = charsetter
-
-	n = new(Nzb)
-	err = parser.DecodeElement(n, nil)
-	if err != nil {
-		err = errors.New(fmt.Sprintf("Could not parse NZB XML: %s", err.Error()))
-		return nil, err
-	}
-	err = validate(n)
-	if err != nil {
-		err = errors.New(fmt.Sprintf("Invalid NZB file: %s", err.Error()))
-		return nil, err
-	}
-	return n, nil
 }

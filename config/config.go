@@ -38,13 +38,6 @@ func (s *ServerConfig) GetAddressStr() string {
 	return fmt.Sprintf("%v:%d", s.Address, port)
 }
 
-//this is the default config that will be used if no config file could be
-//found
-var defaultConfig = Config{
-	IncompleteDir: "gonzbee/incomplete",
-	CompleteDir:   "gonzbee/complete",
-}
-
 func (c *Config) GetIncompleteDir() string {
 	if !path.IsAbs(c.IncompleteDir) {
 		return path.Join(os.Getenv("HOME"), c.IncompleteDir)
@@ -58,75 +51,12 @@ func (c *Config) GetCompleteDir() string {
 	return c.CompleteDir
 }
 
-func (c *Config) createDownloadDirs() error {
-	dirPath := c.IncompleteDir
-	if !path.IsAbs(dirPath) {
-		dirPath = path.Join(os.Getenv("HOME"), dirPath)
-	}
-	err := os.MkdirAll(dirPath, 0777)
-	if err != nil {
-		return err
-	}
 
-	dirPath = c.CompleteDir
-	if !path.IsAbs(dirPath) {
-		dirPath = path.Join(os.Getenv("HOME"), dirPath)
-	}
-	err = os.MkdirAll(dirPath, 0777)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Config) setup() error {
-	return c.createDownloadDirs()
-}
-
-func existingConfig(file *os.File) error {
-	enc := json.NewDecoder(file)
-	err := enc.Decode(&C)
-	return err
-}
-
-func firstConfig(file *os.File) error {
-	config, err := json.MarshalIndent(defaultConfig, "", "\t")
-	if err != nil {
-		return err
-	}
-	_, err = file.Write(config)
-	if err != nil {
-		return err
-	}
-	C = defaultConfig
-	return err
-}
-
-func isEEXIST(err error) bool {
-	perr := err.(*os.PathError)
-	return perr.Err == os.EEXIST
-}
-
-func openOrCreate(path string) (*os.File, bool, error) {
-	file, err := os.OpenFile(path, os.O_EXCL|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil && isEEXIST(err) {
-		file, err = os.Open(path)
-		return file, false, err
-	}
-	return file, true, err
-}
-
-func readConfigFile(path string) error {
-	file, created, err := openOrCreate(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	if created {
-		return firstConfig(file)
-	}
-	return existingConfig(file)
+//this is the default config that will be used if no config file could be
+//found
+var defaultConfig = Config{
+	IncompleteDir: "gonzbee/incomplete",
+	CompleteDir:   "gonzbee/complete",
 }
 
 func init() {
@@ -150,4 +80,75 @@ func init() {
 	if err != nil {
 		panic(fmt.Errorf("Cannot Get Config: %s", err.Error()))
 	}
+}
+
+func readConfigFile(path string) error {
+	file, created, err := openOrCreate(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	if created {
+		return firstConfig(file)
+	}
+	return existingConfig(file)
+}
+
+func firstConfig(file *os.File) error {
+	config, err := json.MarshalIndent(defaultConfig, "", "\t")
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(config)
+	if err != nil {
+		return err
+	}
+	C = defaultConfig
+	return err
+}
+
+func existingConfig(file *os.File) error {
+	enc := json.NewDecoder(file)
+	err := enc.Decode(&C)
+	return err
+}
+
+func openOrCreate(path string) (*os.File, bool, error) {
+	file, err := os.OpenFile(path, os.O_EXCL|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil && isEEXIST(err) {
+		file, err = os.Open(path)
+		return file, false, err
+	}
+	return file, true, err
+}
+
+func (c *Config) setup() error {
+	return c.createDownloadDirs()
+}
+
+func (c *Config) createDownloadDirs() error {
+	dirPath := c.IncompleteDir
+	if !path.IsAbs(dirPath) {
+		dirPath = path.Join(os.Getenv("HOME"), dirPath)
+	}
+	err := os.MkdirAll(dirPath, 0777)
+	if err != nil {
+		return err
+	}
+
+	dirPath = c.CompleteDir
+	if !path.IsAbs(dirPath) {
+		dirPath = path.Join(os.Getenv("HOME"), dirPath)
+	}
+	err = os.MkdirAll(dirPath, 0777)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func isEEXIST(err error) bool {
+	perr := err.(*os.PathError)
+	return perr.Err == os.EEXIST
 }

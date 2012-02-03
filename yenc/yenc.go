@@ -21,193 +21,6 @@ func checkErr(err error) {
 	}
 }
 
-var headerRegexp = regexp.MustCompile("^=ybegin ")
-
-func (d *decoder) findHeader(b []byte) error {
-	i := headerRegexp.FindIndex(b)
-
-	if i == nil {
-		return errors.New("Could not find header")
-	}
-	d.buf = bytes.NewBuffer(b[i[1]:])
-	return nil
-}
-
-type header struct {
-	name  string
-	size  int64
-	part  int
-	total int
-	begin int64
-	end   int64
-}
-
-func (h *header) handleAttrib(name, value string) error {
-	var err error
-	switch name {
-	case "line":
-		//ignore because noone actually cares
-	case "size":
-		_, err = fmt.Sscan(value, &h.size)
-	case "part":
-		_, err = fmt.Sscan(value, &h.part)
-	case "total":
-		_, err = fmt.Sscan(value, &h.total)
-	case "begin":
-		_, err = fmt.Sscan(value, &h.begin)
-	case "end":
-		_, err = fmt.Sscan(value, &h.end)
-	}
-	return err
-}
-
-func consumeName(b *bytes.Buffer) (string, error) {
-	name, err := b.ReadString('=')
-	if err != nil {
-		return name, err
-	}
-	name = strings.TrimRight(name, "=")
-	return name, nil
-}
-
-func consumeValue(b *bytes.Buffer) (string, error) {
-	value, err := b.ReadString(' ')
-	if err != nil {
-		return value, err
-	}
-	value = strings.TrimRight(value, " ")
-	return value, nil
-}
-
-func (d *decoder) parseDataline(h *header) {
-	dline, err := d.buf.ReadString('\n')
-	checkErr(err)
-
-	dline = strings.TrimRight(dline, "\n")
-	dbuf := bytes.NewBufferString(dline)
-
-	for {
-		name, err := consumeName(dbuf)
-		checkErr(err)
-		if name == "name" {
-			break
-		}
-		value, err := consumeValue(dbuf)
-		checkErr(err)
-
-		err = h.handleAttrib(name, value)
-		checkErr(err)
-	}
-	h.name = dbuf.String()
-}
-
-func (d *decoder) parsePartline(h *header) {
-	//move past =ypart
-	_, err := d.buf.ReadString(' ')
-	checkErr(err)
-
-	pline, err := d.buf.ReadString('\n')
-	checkErr(err)
-
-	pline = strings.TrimRight(pline, "\n")
-	pbuf := bytes.NewBufferString(pline)
-	var name, value string
-	for {
-		name, err = consumeName(pbuf)
-		checkErr(err)
-		value, err = consumeValue(pbuf)
-		if err == io.EOF {
-			break
-		}
-		checkErr(err)
-
-		err = h.handleAttrib(name, value)
-		checkErr(err)
-	}
-	//handle the last value through the loop
-	err = h.handleAttrib(name, value)
-	checkErr(err)
-}
-
-func (d *decoder) parseHeader() *header {
-	h := new(header)
-	d.parseDataline(h)
-	//dealing with single part. don't handle partline
-	if h.total == 0 {
-		return h
-	}
-
-	d.parsePartline(h)
-
-	return h
-}
-
-type footer struct {
-	size int
-	crc  uint32
-	pcrc uint32
-}
-
-func (f *footer) handleAttrib(name, value string) error {
-	var err error
-	switch name {
-	case "size":
-		_, err = fmt.Sscan(value, &f.size)
-	case "pcrc32":
-		_, err = fmt.Sscanf(value, "%x", &f.pcrc)
-	case "crc32":
-		_, err = fmt.Sscanf(value, "%x", &f.crc)
-	case "part":
-		//noone cares
-	}
-	return err
-}
-
-//we can sorta handle a corrupted footer
-//so instead of dumping out, return the error
-func (d *decoder) parseFooter() (*footer, error) {
-	corrupt := errors.New("Corrupted footer")
-	f := new(footer)
-	//move past =yend
-	_, err := d.buf.ReadString(' ')
-	if err != nil {
-		return f, corrupt
-	}
-
-	fline, err := d.buf.ReadString('\n')
-	if err != nil {
-		return f, corrupt
-	}
-
-	fline = strings.TrimRight(fline, "\n")
-	fbuf := bytes.NewBufferString(fline)
-	var name, value string
-	for {
-		name, err = consumeName(fbuf)
-		if err != nil {
-			return f, err
-		}
-		value, err = consumeValue(fbuf)
-		if err != nil && err == io.EOF {
-			break
-		} else if err != nil {
-			return f, corrupt
-		}
-
-		err = f.handleAttrib(name, value)
-		if err != nil {
-			return f, corrupt
-		}
-
-	}
-	//handle the last value through the loop
-	err = f.handleAttrib(name, value)
-	if err != nil {
-		return f, corrupt
-	}
-	return f, nil
-}
-
 type YencInfo struct {
 	MultiPart bool
 	Name      string
@@ -216,7 +29,6 @@ type YencInfo struct {
 }
 
 func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
-
 	defer func() {
 		if perr := recover(); perr != nil {
 			err = perr.(error)
@@ -284,4 +96,191 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 		return buf.Bytes(), yenc, errors.New("Could not verify decoding: Bad CRC")
 	}
 	return buf.Bytes(), yenc, nil
+}
+
+var headerRegexp = regexp.MustCompile("^=ybegin ")
+
+func (d *decoder) findHeader(b []byte) error {
+	i := headerRegexp.FindIndex(b)
+
+	if i == nil {
+		return errors.New("Could not find header")
+	}
+	d.buf = bytes.NewBuffer(b[i[1]:])
+	return nil
+}
+
+type header struct {
+	name  string
+	size  int64
+	part  int
+	total int
+	begin int64
+	end   int64
+}
+
+func (d *decoder) parseHeader() *header {
+	h := new(header)
+	d.parseDataline(h)
+	//dealing with single part. don't handle partline
+	if h.total == 0 {
+		return h
+	}
+
+	d.parsePartline(h)
+
+	return h
+}
+
+func (d *decoder) parseDataline(h *header) {
+	dline, err := d.buf.ReadString('\n')
+	checkErr(err)
+
+	dline = strings.TrimRight(dline, "\n")
+	dbuf := bytes.NewBufferString(dline)
+
+	for {
+		name, err := consumeName(dbuf)
+		checkErr(err)
+		if name == "name" {
+			break
+		}
+		value, err := consumeValue(dbuf)
+		checkErr(err)
+
+		err = h.handleAttrib(name, value)
+		checkErr(err)
+	}
+	h.name = dbuf.String()
+}
+
+func (d *decoder) parsePartline(h *header) {
+	//move past =ypart
+	_, err := d.buf.ReadString(' ')
+	checkErr(err)
+
+	pline, err := d.buf.ReadString('\n')
+	checkErr(err)
+
+	pline = strings.TrimRight(pline, "\n")
+	pbuf := bytes.NewBufferString(pline)
+	var name, value string
+	for {
+		name, err = consumeName(pbuf)
+		checkErr(err)
+		value, err = consumeValue(pbuf)
+		if err == io.EOF {
+			break
+		}
+		checkErr(err)
+
+		err = h.handleAttrib(name, value)
+		checkErr(err)
+	}
+	//handle the last value through the loop
+	err = h.handleAttrib(name, value)
+	checkErr(err)
+}
+
+func (h *header) handleAttrib(name, value string) error {
+	var err error
+	switch name {
+	case "line":
+		//ignore because noone actually cares
+	case "size":
+		_, err = fmt.Sscan(value, &h.size)
+	case "part":
+		_, err = fmt.Sscan(value, &h.part)
+	case "total":
+		_, err = fmt.Sscan(value, &h.total)
+	case "begin":
+		_, err = fmt.Sscan(value, &h.begin)
+	case "end":
+		_, err = fmt.Sscan(value, &h.end)
+	}
+	return err
+}
+
+type footer struct {
+	size int
+	crc  uint32
+	pcrc uint32
+}
+
+//we can sorta handle a corrupted footer
+//so instead of dumping out, return the error
+func (d *decoder) parseFooter() (*footer, error) {
+	corrupt := errors.New("Corrupted footer")
+	f := new(footer)
+	//move past =yend
+	_, err := d.buf.ReadString(' ')
+	if err != nil {
+		return f, corrupt
+	}
+
+	fline, err := d.buf.ReadString('\n')
+	if err != nil {
+		return f, corrupt
+	}
+
+	fline = strings.TrimRight(fline, "\n")
+	fbuf := bytes.NewBufferString(fline)
+	var name, value string
+	for {
+		name, err = consumeName(fbuf)
+		if err != nil {
+			return f, err
+		}
+		value, err = consumeValue(fbuf)
+		if err != nil && err == io.EOF {
+			break
+		} else if err != nil {
+			return f, corrupt
+		}
+
+		err = f.handleAttrib(name, value)
+		if err != nil {
+			return f, corrupt
+		}
+
+	}
+	//handle the last value through the loop
+	err = f.handleAttrib(name, value)
+	if err != nil {
+		return f, corrupt
+	}
+	return f, nil
+}
+
+func (f *footer) handleAttrib(name, value string) error {
+	var err error
+	switch name {
+	case "size":
+		_, err = fmt.Sscan(value, &f.size)
+	case "pcrc32":
+		_, err = fmt.Sscanf(value, "%x", &f.pcrc)
+	case "crc32":
+		_, err = fmt.Sscanf(value, "%x", &f.crc)
+	case "part":
+		//noone cares
+	}
+	return err
+}
+
+func consumeName(b *bytes.Buffer) (string, error) {
+	name, err := b.ReadString('=')
+	if err != nil {
+		return name, err
+	}
+	name = strings.TrimRight(name, "=")
+	return name, nil
+}
+
+func consumeValue(b *bytes.Buffer) (string, error) {
+	value, err := b.ReadString(' ')
+	if err != nil {
+		return value, err
+	}
+	value = strings.TrimRight(value, " ")
+	return value, nil
 }
