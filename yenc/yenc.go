@@ -74,7 +74,7 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 			continue
 		}
 		if tok == '=' {
-			tok, err := d.buf.ReadByte()
+			tok, err = d.buf.ReadByte()
 			checkErr(err)
 			if tok == 'y' {
 				break
