@@ -63,7 +63,13 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 		yenc.Begin = header.begin - 1
 	}
 
-	buf := new(bytes.Buffer)
+	var capacity int64
+	if header.begin != 0 {
+		capacity = header.end - header.begin-1
+	} else {
+		capacity = header.size
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, capacity))
 	byteCount := 0
 	for {
 		tok, err := d.buf.ReadByte()
