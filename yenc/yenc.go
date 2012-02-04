@@ -108,7 +108,7 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 	return buf.Bytes(), yenc, nil
 }
 
-var headerRegexp = regexp.MustCompile("^=ybegin ")
+var headerRegexp = regexp.MustCompile("(\n|^)=ybegin ")
 
 func (d *decoder) findHeader(b []byte) error {
 	i := headerRegexp.FindIndex(b)
@@ -233,7 +233,7 @@ func (d *decoder) parseFooter() (*footer, error) {
 		return f, corrupt
 	}
 
-	fline = strings.TrimRight(fline, "\n")
+	fline = strings.TrimRight(fline, " \n")
 	fbuf := bytes.NewBufferString(fline)
 	var name, value string
 	for {
