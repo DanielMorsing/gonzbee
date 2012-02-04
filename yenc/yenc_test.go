@@ -1,10 +1,10 @@
 package yenc_test
 
-import(
+import (
 	. "gonzbee/yenc"
-	"testing"
 	"io/ioutil"
 	"reflect"
+	"testing"
 )
 
 func TestSinglepartDecode(t *testing.T) {

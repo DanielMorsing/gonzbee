@@ -65,7 +65,6 @@ func (c *Config) GetCompleteDir() string {
 	return c.CompleteDir
 }
 
-
 //this is the default config that will be used if no config file could be
 //found
 var defaultConfig = Config{
