@@ -64,8 +64,6 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 	}
 
 	buf := new(bytes.Buffer)
-	crc := crc32.NewIEEE()
-
 	byteCount := 0
 	for {
 		tok, err := d.buf.ReadByte()
@@ -84,7 +82,6 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 		var c byte
 		c = tok - 42
 		buf.WriteByte(c)
-		crc.Write([]byte{c})
 		byteCount++
 	}
 	footer, err := d.parseFooter()
@@ -96,13 +93,13 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 		return buf.Bytes(), yenc, errors.New("Could not verify decoding: Sizes differ")
 	}
 	var crcp *uint32
-	if yenc.MultiPart {
+	if yenc.MultiPart || footer.crc == 0 {
 		crcp = &footer.pcrc
 	} else {
 		crcp = &footer.crc
 	}
 
-	if *crcp != crc.Sum32() {
+	if *crcp != crc32.ChecksumIEEE(buf.Bytes()) {
 		return buf.Bytes(), yenc, errors.New("Could not verify decoding: Bad CRC")
 	}
 	return buf.Bytes(), yenc, nil
