@@ -1,7 +1,5 @@
-//package config is responsible for keeping a relevant config of
-//the gonzbee downloader. right now it uses the gob encoder, which
-//will piss off unix people with their neverending want of flat files.
-//but it's nice and convenient.
+//Package config is responsible for keeping a relevant config of
+//the gonzbee downloader.
 package config
 
 import (
@@ -12,6 +10,10 @@ import (
 	"path"
 )
 
+//The C variable is the general interface to the config package.
+//
+//You get the various settings from this variable which is populated
+//at init time
 var C Config
 
 type Config struct {
@@ -20,6 +22,7 @@ type Config struct {
 	Server        ServerConfig
 }
 
+//ServerConfig holds the settings that describe connecting to a server
 type ServerConfig struct {
 	Address  string
 	Port     int
@@ -27,6 +30,8 @@ type ServerConfig struct {
 	Password string
 }
 
+//GetAddressStr returns the colon separated string of a serverconfigs
+//address and port
 func (s *ServerConfig) GetAddressStr() string {
 	if s.Address == "" {
 		return ""
@@ -38,12 +43,21 @@ func (s *ServerConfig) GetAddressStr() string {
 	return fmt.Sprintf("%v:%d", s.Address, port)
 }
 
+//GetIncompleteDir returns the absolute directory path of the
+//Incomplete directory. This directory will keep inprogress downloads.
+//If the directory is not absolutely specified in the config,
+//the home environment variable will be used as the base
 func (c *Config) GetIncompleteDir() string {
 	if !path.IsAbs(c.IncompleteDir) {
 		return path.Join(os.Getenv("HOME"), c.IncompleteDir)
 	}
 	return c.IncompleteDir
 }
+
+//GetCompleteDir returns the absolute directory path of the
+//Complete directory. This directory will keep completed downloads.
+//If the directory is not absolutely specified in the config,
+//the home environment variable will be used as the base
 func (c *Config) GetCompleteDir() string {
 	if !path.IsAbs(c.CompleteDir) {
 		return path.Join(os.Getenv("HOME"), c.CompleteDir)

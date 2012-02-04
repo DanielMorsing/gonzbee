@@ -1,4 +1,4 @@
-//The yEnc package gives a decoding interface for yEnc encoded binaries
+//Package yenc gives a decoding interface for yEnc encoded binaries
 package yenc
 
 import (
@@ -21,6 +21,9 @@ func checkErr(err error) {
 	}
 }
 
+//YencInfo holds the information needed in order to save the decoded file
+//in the right spot. It also holds the information needed in order to
+//assemble multipart yenc encoded files.
 type YencInfo struct {
 	MultiPart bool
 	Name      string
@@ -28,6 +31,13 @@ type YencInfo struct {
 	Size      int64
 }
 
+//Decode will decode the content of a yEnc part. It returns the decoded
+//contents, the information needed in order to assemble a multipart binary
+//and an error, if any.
+//
+//Note that the error may be present, even though part of the file was
+//decoded. This tends to happen if there were dropped bytes, bad hash, or
+//badly formed yEnc footer.
 func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 	defer func() {
 		if perr := recover(); perr != nil {

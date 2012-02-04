@@ -1,13 +1,18 @@
+//Package nntp provides some common operations on nntp server,
+//mostly for binary downloading
 package nntp
 
 import (
 	"net/textproto"
 )
 
+//Conn represents a NNTP connection
 type Conn struct {
 	*textproto.Conn
 }
 
+//Dial will establish a connection to a NNTP server.
+//It returns the connection and an error, if any
 func Dial(address string) (*Conn, error) {
 	n := new(Conn)
 	var err error
@@ -23,6 +28,8 @@ func Dial(address string) (*Conn, error) {
 	return n, nil
 }
 
+//Authenticate will authenticate with the NNTP server, using the supplied
+//username and password. It returns an error, if any
 func (n *Conn) Authenticate(user, pass string) error {
 	id, err := n.Cmd("AUTHINFO USER %s", user)
 	if err != nil {
@@ -54,6 +61,8 @@ func (n *Conn) Authenticate(user, pass string) error {
 	return err
 }
 
+//SwitchGroup will change the current group, using the supplied
+//group name. It returns an error, if any
 func (n *Conn) SwitchGroup(group string) error {
 	id, err := n.Cmd("GROUP %s", group)
 	if err != nil {
@@ -65,6 +74,8 @@ func (n *Conn) SwitchGroup(group string) error {
 	return err
 }
 
+//GetMessage will retrieve a message from the server, using the supplied
+//msgId. It returns the contents of the message and an error, if any
 func (n *Conn) GetMessage(msgId string) ([]byte, error) {
 	id, err := n.Cmd("BODY <%s>", msgId)
 	if err != nil {

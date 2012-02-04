@@ -10,11 +10,14 @@ import (
 	"path/filepath"
 )
 
+//The Job struct holds all the information needed in order to download
+//a posting from an NZB file
 type Job struct {
 	Name string
 	Nzb  *nzb.Nzb
 }
 
+//FromFile creates a download job from a NZB file
 func FromFile(filepath string) (*Job, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -29,6 +32,7 @@ func FromFile(filepath string) (*Job, error) {
 	return j, nil
 }
 
+//Start will execute a job on the given NNTP connection
 func (j *Job) Start(nntpConn *nntp.Conn) error {
 	path := config.C.GetIncompleteDir()
 	jobDir := filepath.Join(path, j.Name)
