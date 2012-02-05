@@ -16,7 +16,7 @@ func TestSinglepartDecode(t *testing.T) {
 
 	dec, yenc, err := Decode(dec)
 	if err != nil {
-		t.Errorf("got error: %s , expected none", err.Error())
+		t.Fatalf("got error: %s , expected none", err.Error())
 	}
 
 	if yenc.Name != "testfile.txt" {
