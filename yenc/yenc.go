@@ -65,7 +65,7 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 
 	var capacity int64
 	if header.begin != 0 {
-		capacity = header.end - header.begin-1
+		capacity = header.end - header.begin - 1
 	} else {
 		capacity = header.size
 	}
