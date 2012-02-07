@@ -7,17 +7,21 @@ import (
 	"testing"
 )
 
-func TestSinglepartDecode(t *testing.T) {
-	dec, err := ioutil.ReadFile("testdata/encoded.txt")
-	exp, err := ioutil.ReadFile("testdata/expected.txt")
-	if err != nil {
-		t.Errorf("got error: %s , expected none", err.Error())
-	}
-
-	dec, yenc, err := Decode(dec)
+func checkErr(t *testing.T, err error) {
 	if err != nil {
 		t.Fatalf("got error: %s , expected none", err.Error())
 	}
+}
+
+func TestSinglepartDecode(t *testing.T) {
+	dec, err := ioutil.ReadFile("testdata/encoded.txt")
+	checkErr(t, err)
+
+	exp, err := ioutil.ReadFile("testdata/expected.txt")
+	checkErr(t, err)
+
+	dec, yenc, err := Decode(dec)
+	checkErr(t, err)
 
 	if yenc.Name != "testfile.txt" {
 		t.Errorf("Wrong filename. Expected \"testfile.txt\", got: \"%s\"", yenc.Name)
