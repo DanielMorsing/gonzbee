@@ -9,7 +9,7 @@ import (
 	"os"
 )
 
-func checkErr(err error) {
+func panicOn(err interface{}) {
 	if err != nil {
 		panic(err)
 	}
@@ -28,7 +28,7 @@ func main() {
 	fmt.Println(config.C)
 	nzbPath := flag.Arg(0)
 	job, err := job.FromFile(nzbPath)
-	checkErr(err)
+	panicOn(err)
 
 	serverAddress := config.C.Server.GetAddressStr()
 	if serverAddress == "" {
@@ -36,10 +36,10 @@ func main() {
 		os.Exit(1)
 	}
 	conn, err := nntp.Dial(serverAddress)
-	checkErr(err)
+	panicOn(err)
 	defer conn.Close()
 
 	err = conn.Authenticate(config.C.Server.Username, config.C.Server.Password)
-	checkErr(err)
+	panicOn(err)
 	job.Start(conn)
 }

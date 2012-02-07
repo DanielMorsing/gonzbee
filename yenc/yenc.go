@@ -15,7 +15,7 @@ type decoder struct {
 	buf *bytes.Buffer
 }
 
-func checkErr(err error) {
+func panicOn(err interface{}) {
 	if err != nil {
 		panic(err)
 	}
@@ -49,7 +49,7 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 	}()
 	d := new(decoder)
 	err = d.findHeader(part)
-	checkErr(err)
+	panicOn(err)
 
 	yenc = new(YencInfo)
 	header := d.parseHeader()
@@ -72,13 +72,13 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 	byteCount := 0
 	for {
 		tok, err := d.buf.ReadByte()
-		checkErr(err)
+		panicOn(err)
 		if tok == '\n' {
 			continue
 		}
 		if tok == '=' {
 			tok, err = d.buf.ReadByte()
-			checkErr(err)
+			panicOn(err)
 			if tok == 'y' {
 				break
 			}
@@ -146,22 +146,22 @@ func (d *decoder) parseHeader() *header {
 
 func (d *decoder) parseDataline(h *header) {
 	dline, err := d.buf.ReadString('\n')
-	checkErr(err)
+	panicOn(err)
 
 	dline = strings.TrimRight(dline, "\n")
 	dbuf := bytes.NewBufferString(dline)
 
 	for {
 		name, err := consumeName(dbuf)
-		checkErr(err)
+		panicOn(err)
 		if name == "name" {
 			break
 		}
 		value, err := consumeValue(dbuf)
-		checkErr(err)
+		panicOn(err)
 
 		err = h.handleAttrib(name, value)
-		checkErr(err)
+		panicOn(err)
 	}
 	h.name = dbuf.String()
 }
@@ -169,29 +169,29 @@ func (d *decoder) parseDataline(h *header) {
 func (d *decoder) parsePartline(h *header) {
 	//move past =ypart
 	_, err := d.buf.ReadString(' ')
-	checkErr(err)
+	panicOn(err)
 
 	pline, err := d.buf.ReadString('\n')
-	checkErr(err)
+	panicOn(err)
 
 	pline = strings.TrimRight(pline, "\n")
 	pbuf := bytes.NewBufferString(pline)
 	var name, value string
 	for {
 		name, err = consumeName(pbuf)
-		checkErr(err)
+		panicOn(err)
 		value, err = consumeValue(pbuf)
 		if err == io.EOF {
 			break
 		}
-		checkErr(err)
+		panicOn(err)
 
 		err = h.handleAttrib(name, value)
-		checkErr(err)
+		panicOn(err)
 	}
 	//handle the last value through the loop
 	err = h.handleAttrib(name, value)
-	checkErr(err)
+	panicOn(err)
 }
 
 func (h *header) handleAttrib(name, value string) error {
