@@ -49,9 +49,8 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 	}()
 	d := new(decoder)
 	err = d.findHeader(part)
-	if err != nil {
-		return nil, nil, fmt.Errorf("yEnc decode failed: %s", err.Error())
-	}
+	checkErr(err)
+
 	yenc = new(YencInfo)
 	header := d.parseHeader()
 
