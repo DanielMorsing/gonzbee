@@ -3,17 +3,13 @@ package yenc
 
 import (
 	"bytes"
+	"bufio"
 	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
-	"regexp"
 	"strings"
 )
-
-type decoder struct {
-	buf *bytes.Buffer
-}
 
 func panicOn(err interface{}) {
 	if err != nil {
@@ -24,11 +20,30 @@ func panicOn(err interface{}) {
 //YencInfo holds the information needed in order to save the decoded file
 //in the right spot. It also holds the information needed in order to
 //assemble multipart yenc encoded files.
-type YencInfo struct {
-	MultiPart bool
+type Part struct {
 	Name      string
 	Begin     int64
 	Size      int64
+	Parts     int
+	br        *bufio.Reader
+}
+
+//bufio.Reader or bytes.Buffer are the most common types you will work on,
+//so use them directly instead of wrapping by using this interface
+func NewPart(r io.Reader) (*Part, error) {
+	y := new(Part)
+
+	y.br = bufio.NewReader(r)
+	err := y.findHeader()
+	if err != nil {
+		return nil, err
+	}
+
+	err = y.parseHeader()
+	if err != nil {
+		return nil, err
+	}
+	return y, nil
 }
 
 //Decode will decode the content of a yEnc part. It returns the decoded
@@ -38,46 +53,19 @@ type YencInfo struct {
 //Note that the error may be present, even though part of the file was
 //decoded. This tends to happen if there were dropped bytes, bad hash, or
 //badly formed yEnc footer.
-func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
-	defer func() {
-		if perr := recover(); perr != nil {
-			err = perr.(error)
-			err = fmt.Errorf("yEnc decode failed: %s", err.Error())
-			decoded = nil
-			yenc = nil
-		}
-	}()
-	d := new(decoder)
-	err = d.findHeader(part)
-	panicOn(err)
-
-	yenc = new(YencInfo)
-	header := d.parseHeader()
-
-	yenc.Name = header.name
-	yenc.Size = header.size
-
-	if header.total > 1 {
-		yenc.MultiPart = true
-		yenc.Begin = header.begin - 1
-	}
-
-	var capacity int64
-	if header.begin != 0 {
-		capacity = header.end - header.begin - 1
-	} else {
-		capacity = header.size
-	}
-	buf := bytes.NewBuffer(make([]byte, 0, capacity))
+func (y *Part) Decode(w io.Writer) error {
+	bw := bufio.NewWriter(w)
 	byteCount := 0
+	crc := crc32.NewIEEE()
+	crcw := bufio.NewWriter(crc)
 	for {
-		tok, err := d.buf.ReadByte()
+		tok, err := y.br.ReadByte()
 		panicOn(err)
 		if tok == '\n' {
 			continue
 		}
 		if tok == '=' {
-			tok, err = d.buf.ReadByte()
+			tok, err = y.br.ReadByte()
 			panicOn(err)
 			if tok == 'y' {
 				break
@@ -86,129 +74,174 @@ func Decode(part []byte) (decoded []byte, yenc *YencInfo, err error) {
 		}
 		var c byte
 		c = tok - 42
-		buf.WriteByte(c)
+		bw.WriteByte(c)
+		crcw.WriteByte(c)
 		byteCount++
 	}
-	footer, err := d.parseFooter()
+	bw.Flush()
+	crcw.Flush()
+	footer, err := y.parseFooter()
 	if err != nil {
-		return buf.Bytes(), yenc, fmt.Errorf("Could not verify decoding: %s", err.Error())
+		return fmt.Errorf("Could not verify decoding: %s", err.Error())
 	}
 
 	if footer.size != byteCount {
-		return buf.Bytes(), yenc, errors.New("Could not verify decoding: Sizes differ")
+		return errors.New("Could not verify decoding: Sizes differ")
 	}
 	var crcp *uint32
-	if yenc.MultiPart || footer.crc == 0 {
+	if y.Parts > 1 || footer.crc == 0 {
 		crcp = &footer.pcrc
 	} else {
 		crcp = &footer.crc
 	}
 
-	if *crcp != crc32.ChecksumIEEE(buf.Bytes()) {
-		return buf.Bytes(), yenc, errors.New("Could not verify decoding: Bad CRC")
+	if *crcp != crc.Sum32() {
+		return errors.New("Could not verify decoding: Bad CRC")
 	}
-	return buf.Bytes(), yenc, nil
-}
-
-var headerRegexp = regexp.MustCompile("(\n|^)=ybegin ")
-
-func (d *decoder) findHeader(b []byte) error {
-	i := headerRegexp.FindIndex(b)
-
-	if i == nil {
-		return errors.New("Could not find header")
-	}
-	d.buf = bytes.NewBuffer(b[i[1]:])
 	return nil
 }
 
-type header struct {
-	name  string
-	size  int64
-	part  int
-	total int
-	begin int64
-	end   int64
-}
-
-func (d *decoder) parseHeader() *header {
-	h := new(header)
-	d.parseDataline(h)
-	//dealing with single part. don't handle partline
-	if h.total == 0 {
-		return h
+func (p *Part) findHeader() error {
+	const (
+		StatePotential = iota
+		StateNormal
+	)
+	i := 0
+	str := []byte("=ybegin ")
+	//regexp package will read past the end of the match, so making my own little matching statemachine
+	state := StatePotential
+	for {
+		//when completely matched
+		if i == len(str) {
+			return nil
+		}
+		c, err := p.br.ReadByte()
+		if err != nil {
+			return errors.New("Could not find header")
+		}
+		switch state {
+		case StatePotential:
+			if str[i] == c {
+				i++
+				continue
+			} else if c != '\n' {
+				state = StateNormal
+			}
+			i = 0
+		case StateNormal:
+			if c == '\n' {
+				state = StatePotential
+			}
+		}
 	}
-
-	d.parsePartline(h)
-
-	return h
+	panic("unreachable")
 }
 
-func (d *decoder) parseDataline(h *header) {
-	dline, err := d.buf.ReadString('\n')
-	panicOn(err)
+func (y *Part) parseHeader() error {
+	err := y.parseDataline()
+	if err != nil {
+		return err
+	}
+	//dealing with single part. don't handle partline
+	if y.Parts == 0 {
+		return nil
+	}
+	err = y.parsePartline()
+
+	return err
+}
+
+func (y *Part) parseDataline() error {
+	dline, err := y.br.ReadString('\n')
+	if err != nil {
+		return errors.New("Malformed Header")
+	}
 
 	dline = strings.TrimRight(dline, "\n")
 	dbuf := bytes.NewBufferString(dline)
 
 	for {
 		name, err := consumeName(dbuf)
-		panicOn(err)
+		if err != nil {
+			return errors.New("Malformed Header")
+		}
+
 		if name == "name" {
 			break
 		}
 		value, err := consumeValue(dbuf)
-		panicOn(err)
+		if err != nil {
+			return errors.New("Malformed Header")
+		}
 
-		err = h.handleAttrib(name, value)
-		panicOn(err)
+		err = y.handleAttrib(name, value)
+		if err != nil {
+			return errors.New("Malformed yEnc Attribute")
+		}
 	}
-	h.name = dbuf.String()
+	y.Name = dbuf.String()
+	return nil
 }
 
-func (d *decoder) parsePartline(h *header) {
+func (y *Part) parsePartline() error {
 	//move past =ypart
-	_, err := d.buf.ReadString(' ')
-	panicOn(err)
+	_, err := y.br.ReadString(' ')
+	if err != nil {
+		return errors.New("Malformed Header")
+	}
 
-	pline, err := d.buf.ReadString('\n')
-	panicOn(err)
+	pline, err := y.br.ReadString('\n')
+	if err != nil {
+		return errors.New("Malformed Header")
+	}
 
 	pline = strings.TrimRight(pline, "\n")
 	pbuf := bytes.NewBufferString(pline)
 	var name, value string
 	for {
 		name, err = consumeName(pbuf)
-		panicOn(err)
+		if err != nil {
+			return errors.New("Malformed Header")
+		}
+
 		value, err = consumeValue(pbuf)
 		if err == io.EOF {
 			break
+		} else if err != nil {
+			return errors.New("Malformed Header")
 		}
-		panicOn(err)
 
-		err = h.handleAttrib(name, value)
+		err = y.handleAttrib(name, value)
 		panicOn(err)
 	}
 	//handle the last value through the loop
-	err = h.handleAttrib(name, value)
-	panicOn(err)
+	err = y.handleAttrib(name, value)
+	return err
 }
 
-func (h *header) handleAttrib(name, value string) error {
+func (y *Part) handleAttrib(name, value string) error {
 	var err error
 	switch name {
 	case "line":
 		//ignore because noone actually cares
 	case "size":
-		_, err = fmt.Sscan(value, &h.size)
+		if y.Size == 0 {
+			_, err = fmt.Sscan(value, &y.Size)
+		}
 	case "part":
-		_, err = fmt.Sscan(value, &h.part)
+		//noone cares
 	case "total":
-		_, err = fmt.Sscan(value, &h.total)
+		_, err = fmt.Sscan(value, &y.Parts)
 	case "begin":
-		_, err = fmt.Sscan(value, &h.begin)
+		_, err = fmt.Sscan(value, &y.Begin)
 	case "end":
-		_, err = fmt.Sscan(value, &h.end)
+		if y.Begin != 0 {
+			var end int64
+			_, err = fmt.Sscan(value, &end)
+			y.Size = end - y.Begin - 1
+		}
+	default:
+		err = errors.New("Unknown Attribute")
 	}
 	return err
 }
@@ -221,16 +254,16 @@ type footer struct {
 
 //we can sorta handle a corrupted footer
 //so instead of dumping out, return the error
-func (d *decoder) parseFooter() (*footer, error) {
+func (y *Part) parseFooter() (*footer, error) {
 	corrupt := errors.New("Corrupted footer")
 	f := new(footer)
 	//move past =yend
-	_, err := d.buf.ReadString(' ')
+	_, err := y.br.ReadString(' ')
 	if err != nil {
 		return f, corrupt
 	}
 
-	fline, err := d.buf.ReadString('\n')
+	fline, err := y.br.ReadString('\n')
 	if err != nil {
 		return f, corrupt
 	}

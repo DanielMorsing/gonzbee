@@ -1,6 +1,7 @@
 package job
 
 import (
+	"bytes"
 	"gonzbee/config"
 	"gonzbee/nntp"
 	"gonzbee/nzb"
@@ -44,7 +45,11 @@ func (j *Job) Start(nntpConn *nntp.Conn) error {
 			if err != nil {
 				continue
 			}
-			yenc.Decode(contents)
+			part, _ := yenc.NewPart(bytes.NewBuffer(contents))
+			file, _ := os.OpenFile(filepath.Join(jobDir,part.Name), os.O_WRONLY | os.O_CREATE, 0644)
+			file.Seek(part.Begin, os.SEEK_SET)
+			part.Decode(file)
+			file.Close()
 		}
 	}
 	return nil

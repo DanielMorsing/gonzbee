@@ -2,9 +2,11 @@ package yenc_test
 
 import (
 	. "gonzbee/yenc"
-	"io/ioutil"
 	"reflect"
 	"testing"
+	"os"
+	"io/ioutil"
+	"bytes"
 )
 
 func checkErr(t *testing.T, err error) {
@@ -14,21 +16,26 @@ func checkErr(t *testing.T, err error) {
 }
 
 func TestSinglepartDecode(t *testing.T) {
-	dec, err := ioutil.ReadFile("testdata/encoded.txt")
+	dec, err := os.Open("testdata/encoded.txt")
 	checkErr(t, err)
+	defer dec.Close()
+
+	yenc, err := NewPart(dec)
+	checkErr(t, err)
+
+	if yenc.Name != "testfile.txt" {
+		t.Fatalf("Wrong filename. Expected \"testfile.txt\", got: \"%s\"", yenc.Name)
+	}
 
 	exp, err := ioutil.ReadFile("testdata/expected.txt")
 	checkErr(t, err)
 
-	dec, yenc, err := Decode(dec)
+	buf := bytes.Buffer{}
+	err = yenc.Decode(&buf)
 	checkErr(t, err)
 
-	if yenc.Name != "testfile.txt" {
-		t.Errorf("Wrong filename. Expected \"testfile.txt\", got: \"%s\"", yenc.Name)
-	}
-
 	//check if it's the same as the expected value
-	if !reflect.DeepEqual(dec, exp) {
+	if !reflect.DeepEqual(buf.Bytes(), exp) {
 		t.Errorf("binaries differ")
 	}
 
