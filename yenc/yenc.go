@@ -11,12 +11,6 @@ import (
 	"strings"
 )
 
-func panicOn(err interface{}) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 //YencInfo holds the information needed in order to save the decoded file
 //in the right spot. It also holds the information needed in order to
 //assemble multipart yenc encoded files.
