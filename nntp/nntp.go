@@ -3,6 +3,8 @@
 package nntp
 
 import (
+	"io"
+	"io/ioutil"
 	"net/textproto"
 )
 
@@ -88,4 +90,36 @@ func (n *Conn) GetMessage(msgId string) ([]byte, error) {
 		return nil, err
 	}
 	return n.ReadDotBytes()
+}
+
+type nntpReader struct {
+	conn *Conn
+	io.Reader
+	id uint
+}
+
+func (n *nntpReader) Close() error {
+	//if someone closes midway through a read, we want to consume all the data
+	ioutil.ReadAll(n.Reader)
+	n.conn.EndResponse(n.id)
+	return nil
+}
+
+func (n *Conn) GetMessageReader(msgId string) (io.ReadCloser, error) {
+	id, err := n.Cmd("BODY <%s>", msgId)
+	if err != nil {
+		return nil, err
+	}
+	n.StartResponse(id)
+	_, _, err = n.ReadCodeLine(222)
+	if err != nil {
+		n.EndResponse(id)
+		return nil, err
+	}
+	nntp := &nntpReader{
+		Reader: n.DotReader(),
+		conn:   n,
+		id:     id,
+	}
+	return nntp, nil
 }

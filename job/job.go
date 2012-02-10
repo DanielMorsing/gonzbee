@@ -1,7 +1,6 @@
 package job
 
 import (
-	"bytes"
 	"gonzbee/config"
 	"gonzbee/nntp"
 	"gonzbee/nzb"
@@ -41,15 +40,16 @@ func (j *Job) Start(nntpConn *nntp.Conn) error {
 	for _, file := range j.Nzb.File {
 		nntpConn.SwitchGroup(file.Groups[0])
 		for _, seg := range file.Segments {
-			contents, err := nntpConn.GetMessage(seg.MsgId)
+			contents, err := nntpConn.GetMessageReader(seg.MsgId)
 			if err != nil {
 				continue
 			}
-			part, _ := yenc.NewPart(bytes.NewBuffer(contents))
-			file, _ := os.OpenFile(filepath.Join(jobDir,part.Name), os.O_WRONLY | os.O_CREATE, 0644)
+			part, _ := yenc.NewPart(contents)
+			file, _ := os.OpenFile(filepath.Join(jobDir, part.Name), os.O_WRONLY|os.O_CREATE, 0644)
 			file.Seek(part.Begin, os.SEEK_SET)
 			part.Decode(file)
 			file.Close()
+			contents.Close()
 		}
 	}
 	return nil
