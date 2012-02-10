@@ -1,12 +1,12 @@
 package yenc_test
 
 import (
+	"bytes"
 	. "gonzbee/yenc"
+	"io/ioutil"
+	"os"
 	"reflect"
 	"testing"
-	"os"
-	"io/ioutil"
-	"bytes"
 )
 
 func checkErr(t *testing.T, err error) {

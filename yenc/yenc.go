@@ -2,8 +2,8 @@
 package yenc
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -21,11 +21,11 @@ func panicOn(err interface{}) {
 //in the right spot. It also holds the information needed in order to
 //assemble multipart yenc encoded files.
 type Part struct {
-	Name      string
-	Begin     int64
-	Size      int64
-	Parts     int
-	br        *bufio.Reader
+	Name  string
+	Begin int64
+	Size  int64
+	Parts int
+	br    *bufio.Reader
 }
 
 //bufio.Reader or bytes.Buffer are the most common types you will work on,
