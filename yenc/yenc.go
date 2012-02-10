@@ -60,13 +60,17 @@ func (y *Part) Decode(w io.Writer) error {
 	crcw := bufio.NewWriter(crc)
 	for {
 		tok, err := y.br.ReadByte()
-		panicOn(err)
+		if err != nil {
+			return errors.New("Unexpected End-of-File")
+		}
 		if tok == '\n' {
 			continue
 		}
 		if tok == '=' {
 			tok, err = y.br.ReadByte()
-			panicOn(err)
+			if err != nil {
+				return errors.New("Unexpected End-of-File")
+			}
 			if tok == 'y' {
 				break
 			}
@@ -74,11 +78,17 @@ func (y *Part) Decode(w io.Writer) error {
 		}
 		var c byte
 		c = tok - 42
-		bw.WriteByte(c)
+		err = bw.WriteByte(c)
+		if err != nil {
+			return errors.New("I/O Error")
+		}
 		crcw.WriteByte(c)
 		byteCount++
 	}
-	bw.Flush()
+	err := bw.Flush()
+	if err != nil {
+		return errors.New("I/O Error")
+	}
 	crcw.Flush()
 	footer, err := y.parseFooter()
 	if err != nil {
@@ -212,7 +222,9 @@ func (y *Part) parsePartline() error {
 		}
 
 		err = y.handleAttrib(name, value)
-		panicOn(err)
+		if err != nil {
+			return errors.New("Malformed Header")
+		}
 	}
 	//handle the last value through the loop
 	err = y.handleAttrib(name, value)
