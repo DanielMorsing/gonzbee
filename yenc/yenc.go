@@ -150,7 +150,7 @@ func (y *Part) parseHeader() error {
 		return err
 	}
 	//dealing with single part. don't handle partline
-	if (y.Parts == 0) == (y.Part == 0) {
+	if y.Parts == 0 && y.Part == 0 {
 		return nil
 	}
 	err = y.parsePartline()
