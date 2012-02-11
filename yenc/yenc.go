@@ -19,6 +19,9 @@ type Part struct {
 	Begin int64
 	Size  int64
 	Parts int
+	Part  int
+	end   int64
+	multipart bool
 	br    *bufio.Reader
 }
 
@@ -93,7 +96,7 @@ func (y *Part) Decode(w io.Writer) error {
 		return errors.New("Could not verify decoding: Sizes differ")
 	}
 	var crcp *uint32
-	if y.Parts > 1 || footer.crc == 0 {
+	if y.multipart || footer.crc == 0 {
 		crcp = &footer.pcrc
 	} else {
 		crcp = &footer.crc
@@ -147,10 +150,12 @@ func (y *Part) parseHeader() error {
 		return err
 	}
 	//dealing with single part. don't handle partline
-	if y.Parts == 0 {
+	if (y.Parts == 0) == (y.Part == 0) {
 		return nil
 	}
 	err = y.parsePartline()
+	y.Size = y.end - y.Begin
+	y.multipart = true
 
 	return err
 }
@@ -236,18 +241,16 @@ func (y *Part) handleAttrib(name, value string) error {
 		}
 	case "part":
 		//noone cares
+		_, err = fmt.Sscan(value, &y.Part)
 	case "total":
 		_, err = fmt.Sscan(value, &y.Parts)
 	case "begin":
 		_, err = fmt.Sscan(value, &y.Begin)
+		y.Begin--
 	case "end":
-		if y.Begin != 0 {
-			var end int64
-			_, err = fmt.Sscan(value, &end)
-			y.Size = end - y.Begin - 1
-		}
+		_, err = fmt.Sscan(value, &y.end)
 	default:
-		err = errors.New("Unknown Attribute")
+		err = fmt.Errorf("Unknown Attribute: %s=%s", name, value)
 	}
 	return err
 }

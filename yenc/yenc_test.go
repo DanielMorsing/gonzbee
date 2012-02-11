@@ -5,13 +5,38 @@ import (
 	. "gonzbee/yenc"
 	"io/ioutil"
 	"os"
-	"reflect"
 	"testing"
+	"reflect"
 )
 
 func checkErr(t *testing.T, err error) {
 	if err != nil {
 		t.Fatalf("got error: %s , expected none", err.Error())
+	}
+}
+
+type testYenc struct {
+	begin int64
+	name string
+	size int64
+	part int
+}
+
+func checkPart(t *testing.T, p *Part, test *testYenc) {
+	if p.Name != test.name {
+		t.Errorf("Wrong filename. Expected \"%s\", got: \"%s\"", test.name, p.Name)
+	}
+	if p.Size != test.size {
+		t.Errorf("Wrong size, Expected %d, got %d", test.size, p.Size)
+	}
+	if p.Begin != test.begin {
+		t.Errorf("Wrong Begin, Expected %d, got %d", test.begin, p.Begin)
+	}
+	if p.Part != test.part {
+		t.Errorf("Wrong part number, Expected %d, got %d", test.part, p.Part)
+	}
+	if t.Failed() {
+		t.FailNow()
 	}
 }
 
@@ -23,12 +48,17 @@ func TestSinglepartDecode(t *testing.T) {
 	yenc, err := NewPart(dec)
 	checkErr(t, err)
 
-	if yenc.Name != "testfile.txt" {
-		t.Fatalf("Wrong filename. Expected \"testfile.txt\", got: \"%s\"", yenc.Name)
-	}
-
 	exp, err := ioutil.ReadFile("testdata/expected.txt")
 	checkErr(t, err)
+
+	data := testYenc{
+		begin: 0,
+		size: int64(len(exp)),
+		part: 0,
+		name: "testfile.txt",
+	}
+
+	checkPart(t, yenc, &data)
 
 	buf := bytes.Buffer{}
 	err = yenc.Decode(&buf)
@@ -36,6 +66,47 @@ func TestSinglepartDecode(t *testing.T) {
 
 	//check if it's the same as the expected value
 	if !reflect.DeepEqual(buf.Bytes(), exp) {
+		t.Errorf("binaries differ")
+	}
+}
+
+func TestMultipartDecode(t *testing.T) {
+	dec, err := os.Open("testdata/00000020.ntx")
+	checkErr(t, err)
+	defer dec.Close()
+
+	yenc, err := NewPart(dec)
+	data := testYenc{
+		begin: 0,
+		size: 11250,
+		name: "joystick.jpg",
+		part: 1,
+	}
+	checkPart(t, yenc, &data)
+	buf1 := bytes.Buffer{}
+	err = yenc.Decode(&buf1)
+	checkErr(t, err)
+
+	dec, err = os.Open("testdata/00000021.ntx")
+	checkErr(t, err)
+	defer dec.Close()
+	data = testYenc{
+		begin: 11250,
+		size: 8088,
+		name: "joystick.jpg",
+		part: 2,
+	}
+
+	yenc, err = NewPart(dec)
+	checkPart(t, yenc, &data)
+	buf2 := bytes.Buffer{}
+	err = yenc.Decode(&buf2)
+	checkErr(t, err)
+
+	exp, err := ioutil.ReadFile("testdata/joystick.jpg")
+	checkErr(t, err)
+	decoded := append(buf1.Bytes(), buf2.Bytes()...)
+	if !reflect.DeepEqual(exp, decoded) {
 		t.Errorf("binaries differ")
 	}
 
