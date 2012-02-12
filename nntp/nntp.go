@@ -3,6 +3,7 @@
 package nntp
 
 import (
+	"crypto/tls"
 	"io"
 	"io/ioutil"
 	"net/textproto"
@@ -22,6 +23,21 @@ func Dial(address string) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, _, err = n.ReadCodeLine(20)
+	if err != nil {
+		n.Close()
+		return nil, err
+	}
+	return n, nil
+}
+
+func DialTLS(address string) (*Conn, error) {
+	n := new(Conn)
+	tlsConn, err := tls.Dial("tcp", address, nil)
+	if err != nil {
+		return nil, err
+	}
+	n.Conn = textproto.NewConn(tlsConn)
 	_, _, err = n.ReadCodeLine(20)
 	if err != nil {
 		n.Close()

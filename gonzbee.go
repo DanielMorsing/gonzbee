@@ -35,7 +35,7 @@ func main() {
 		fmt.Fprintf(os.Stdout, "No server address in config")
 		os.Exit(1)
 	}
-	conn, err := nntp.Dial(serverAddress)
+	conn, err := nntp.DialTLS(serverAddress)
 	panicOn(err)
 	defer conn.Close()
 

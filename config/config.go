@@ -28,6 +28,7 @@ type ServerConfig struct {
 	Port     int
 	Username string
 	Password string
+	TLS      bool
 }
 
 //GetAddressStr returns the colon separated string of a serverconfigs
