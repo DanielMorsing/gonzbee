@@ -44,7 +44,7 @@ type Nzb struct {
 //Parse Nzb returns a pointer to a filled in Nzb struct, with the xml
 //document that it reads from r.
 //If there is an error, n will be nil and err will be non-nil
-func ParseNzb(r io.Reader) (n *Nzb, err error) {
+func Parse(r io.Reader) (n *Nzb, err error) {
 	parser := xml.NewDecoder(r)
 	parser.CharsetReader = charsetter
 

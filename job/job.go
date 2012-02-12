@@ -24,7 +24,7 @@ func FromFile(filepath string) (*Job, error) {
 		return nil, err
 	}
 	defer file.Close()
-	nzbFile, err := nzb.ParseNzb(file)
+	nzbFile, err := nzb.Parse(file)
 	if err != nil {
 		return nil, err
 	}

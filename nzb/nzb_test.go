@@ -52,13 +52,13 @@ func checkResult(t *testing.T, expected interface{}, was interface{}, err error)
 
 func TestMarshal(t *testing.T) {
 	reader := strings.NewReader(singleFile)
-	nzb, err := ParseNzb(reader)
+	nzb, err := Parse(reader)
 	checkResult(t, &topnzb, nzb, err)
 }
 
 func TestInvalidNzb(t *testing.T) {
 	reader := strings.NewReader(invalid)
-	nzb, err := ParseNzb(reader)
+	nzb, err := Parse(reader)
 	if err == nil {
 		t.Errorf("Parsed an invalid NZB. Got: %v", nzb)
 	}
