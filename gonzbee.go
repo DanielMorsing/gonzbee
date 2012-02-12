@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"gonzbee/config"
 	"gonzbee/job"
-	"gonzbee/nntp"
+	"gonzbee/nzb"
 	"os"
+	"path/filepath"
 )
 
 func panicOn(err interface{}) {
@@ -27,19 +28,12 @@ func main() {
 
 	fmt.Println(config.C)
 	nzbPath := flag.Arg(0)
-	job, err := job.FromFile(nzbPath)
+	file, err := os.Open(nzbPath)
 	panicOn(err)
 
-	serverAddress := config.C.Server.GetAddressStr()
-	if serverAddress == "" {
-		fmt.Fprintf(os.Stdout, "No server address in config")
-		os.Exit(1)
-	}
-	conn, err := nntp.DialTLS(serverAddress)
+	n, err := nzb.Parse(file)
 	panicOn(err)
-	defer conn.Close()
+	file.Close()
 
-	err = conn.Authenticate(config.C.Server.Username, config.C.Server.Password)
-	panicOn(err)
-	job.Start(conn)
+	job.Start(n, filepath.Base(nzbPath))
 }
