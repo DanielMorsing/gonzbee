@@ -5,8 +5,8 @@ import (
 	. "gonzbee/yenc"
 	"io/ioutil"
 	"os"
-	"testing"
 	"reflect"
+	"testing"
 )
 
 func checkErr(t *testing.T, err error) {
@@ -17,9 +17,9 @@ func checkErr(t *testing.T, err error) {
 
 type testYenc struct {
 	begin int64
-	name string
-	size int64
-	part int
+	name  string
+	size  int64
+	part  int
 }
 
 func checkPart(t *testing.T, p *Part, test *testYenc) {
@@ -53,9 +53,9 @@ func TestSinglepartDecode(t *testing.T) {
 
 	data := testYenc{
 		begin: 0,
-		size: int64(len(exp)),
-		part: 0,
-		name: "testfile.txt",
+		size:  int64(len(exp)),
+		part:  0,
+		name:  "testfile.txt",
 	}
 
 	checkPart(t, yenc, &data)
@@ -78,9 +78,9 @@ func TestMultipartDecode(t *testing.T) {
 	yenc, err := NewPart(dec)
 	data := testYenc{
 		begin: 0,
-		size: 11250,
-		name: "joystick.jpg",
-		part: 1,
+		size:  11250,
+		name:  "joystick.jpg",
+		part:  1,
 	}
 	checkPart(t, yenc, &data)
 	buf1 := bytes.Buffer{}
@@ -92,9 +92,9 @@ func TestMultipartDecode(t *testing.T) {
 	defer dec.Close()
 	data = testYenc{
 		begin: 11250,
-		size: 8088,
-		name: "joystick.jpg",
-		part: 2,
+		size:  8088,
+		name:  "joystick.jpg",
+		part:  2,
 	}
 
 	yenc, err = NewPart(dec)

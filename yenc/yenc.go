@@ -15,14 +15,14 @@ import (
 //in the right spot. It also holds the information needed in order to
 //assemble multipart yenc encoded files.
 type Part struct {
-	Name  string
-	Begin int64
-	Size  int64
-	Parts int
-	Part  int
-	end   int64
+	Name      string
+	Begin     int64
+	Size      int64
+	Parts     int
+	Part      int
+	end       int64
 	multipart bool
-	br    *bufio.Reader
+	br        *bufio.Reader
 }
 
 //bufio.Reader or bytes.Buffer are the most common types you will work on,
