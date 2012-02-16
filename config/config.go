@@ -142,19 +142,13 @@ func (c *Config) setup() error {
 }
 
 func (c *Config) createDownloadDirs() error {
-	dirPath := c.IncompleteDir
-	if !path.IsAbs(dirPath) {
-		dirPath = path.Join(os.Getenv("HOME"), dirPath)
-	}
+	dirPath := c.GetIncompleteDir()
 	err := os.MkdirAll(dirPath, 0777)
 	if err != nil {
 		return err
 	}
 
-	dirPath = c.CompleteDir
-	if !path.IsAbs(dirPath) {
-		dirPath = path.Join(os.Getenv("HOME"), dirPath)
-	}
+	dirPath = c.GetCompleteDir()
 	err = os.MkdirAll(dirPath, 0777)
 	if err != nil {
 		return err
