@@ -60,7 +60,10 @@ func newConnection() error {
 				if err != nil {
 					panic(err)
 				}
-				b, _ := n.GetMessageReader(m.msgId)
+				b, err := n.GetMessageReader(m.msgId)
+				if err != nil {
+					log.Print("Error getting Message ", m.msgId, ": ", err.Error())
+				}
 				m.ch <- b
 			case <-(after(10 * time.Second)):
 				reaper <- 1
@@ -99,22 +102,28 @@ func (j *job) handle() {
 	for _, f := range j.n.File {
 		ch := make(chan io.ReadCloser)
 		wg.Add(1)
+		partsLeft := len(f.Segments)
 		go func(ret chan io.ReadCloser) {
 			m := <-ret
+			for m == nil {
+				partsLeft--
+				m = <-ret
+			}
 			part, _ := yenc.NewPart(m)
 			file, _ := os.Create(filepath.Join(j.dir, part.Name))
-			partsLeft := part.Parts
 			file.Seek(part.Begin, os.SEEK_SET)
 			part.Decode(file)
 			m.Close()
 			partsLeft--
-			for partsLeft > 0 {
+			for ; partsLeft > 0; partsLeft-- {
 				m = <-ret
+				if m == nil {
+					continue
+				}
 				part, _ := yenc.NewPart(m)
 				file.Seek(part.Begin, os.SEEK_SET)
 				part.Decode(file)
 				m.Close()
-				partsLeft--
 			}
 			file.Close()
 			wg.Done()
