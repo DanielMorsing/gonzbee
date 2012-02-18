@@ -98,8 +98,8 @@ func (j *job) handle() {
 	wg := new(sync.WaitGroup)
 	for _, f := range j.n.File {
 		ch := make(chan io.ReadCloser)
+		wg.Add(1)
 		go func(ret chan io.ReadCloser) {
-			wg.Add(1)
 			m := <-ret
 			part, _ := yenc.NewPart(m)
 			file, _ := os.Create(filepath.Join(j.dir, part.Name))
