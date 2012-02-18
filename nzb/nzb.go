@@ -17,7 +17,7 @@ type Segment struct {
 	//The sequence number
 	Number int `xml:"number,attr"`
 	//The Message-ID
-	MsgId string `xml:",innerxml"`
+	MsgId string `xml:",chardata"`
 }
 
 //File represents a single file in the NZB file
