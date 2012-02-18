@@ -81,7 +81,7 @@ func init() {
 	}
 	configDir := path.Join(homeDir, ".gonzbee")
 	err := os.Mkdir(configDir, 0777)
-	if err != nil && !isEEXIST(err) {
+	if err != nil && !os.IsExist(err) {
 		panic(fmt.Errorf("Cannot Get Config: %s", err.Error()))
 	}
 	//check if a config file exists
@@ -130,7 +130,7 @@ func existingConfig(file *os.File) error {
 
 func openOrCreate(path string) (*os.File, bool, error) {
 	file, err := os.OpenFile(path, os.O_EXCL|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil && isEEXIST(err) {
+	if err != nil && os.IsExist(err) {
 		file, err = os.Open(path)
 		return file, false, err
 	}
@@ -156,7 +156,3 @@ func (c *Config) createDownloadDirs() error {
 	return nil
 }
 
-func isEEXIST(err error) bool {
-	perr := err.(*os.PathError)
-	return perr.Err == os.EEXIST
-}
