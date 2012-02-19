@@ -16,15 +16,15 @@ func checkErr(t *testing.T, err error) {
 }
 
 type testYenc struct {
-	begin int64
-	name  string
-	size  int64
-	part  int
+	begin  int64
+	name   string
+	size   int64
+	number int
 }
 
 func checkPart(t *testing.T, p *Part, test *testYenc) {
-	if p.Name != test.name {
-		t.Errorf("Wrong filename. Expected \"%s\", got: \"%s\"", test.name, p.Name)
+	if p.Filename != test.name {
+		t.Errorf("Wrong filename. Expected \"%s\", got: \"%s\"", test.name, p.Filename)
 	}
 	if p.Size != test.size {
 		t.Errorf("Wrong size, Expected %d, got %d", test.size, p.Size)
@@ -32,8 +32,8 @@ func checkPart(t *testing.T, p *Part, test *testYenc) {
 	if p.Begin != test.begin {
 		t.Errorf("Wrong Begin, Expected %d, got %d", test.begin, p.Begin)
 	}
-	if p.Part != test.part {
-		t.Errorf("Wrong part number, Expected %d, got %d", test.part, p.Part)
+	if p.Number != test.number {
+		t.Errorf("Wrong part number, Expected %d, got %d", test.number, p.Number)
 	}
 	if t.Failed() {
 		t.FailNow()
@@ -52,10 +52,10 @@ func TestSinglepartDecode(t *testing.T) {
 	checkErr(t, err)
 
 	data := testYenc{
-		begin: 0,
-		size:  int64(len(exp)),
-		part:  0,
-		name:  "testfile.txt",
+		begin:  0,
+		size:   int64(len(exp)),
+		number: 0,
+		name:   "testfile.txt",
 	}
 
 	checkPart(t, yenc, &data)
@@ -77,10 +77,10 @@ func TestMultipartDecode(t *testing.T) {
 
 	yenc, err := NewPart(dec)
 	data := testYenc{
-		begin: 0,
-		size:  11250,
-		name:  "joystick.jpg",
-		part:  1,
+		begin:  0,
+		size:   11250,
+		name:   "joystick.jpg",
+		number: 1,
 	}
 	checkPart(t, yenc, &data)
 	buf1 := bytes.Buffer{}
@@ -91,10 +91,10 @@ func TestMultipartDecode(t *testing.T) {
 	checkErr(t, err)
 	defer dec.Close()
 	data = testYenc{
-		begin: 11250,
-		size:  8088,
-		name:  "joystick.jpg",
-		part:  2,
+		begin:  11250,
+		size:   8088,
+		name:   "joystick.jpg",
+		number: 2,
 	}
 
 	yenc, err = NewPart(dec)
