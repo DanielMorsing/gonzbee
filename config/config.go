@@ -13,7 +13,7 @@ import (
 //The C variable is the general interface to the config package.
 //
 //You get the various settings from this variable which is populated
-//at init time
+//at init time.
 var C Config
 
 type Config struct {
@@ -22,7 +22,7 @@ type Config struct {
 	Server        ServerConfig
 }
 
-//ServerConfig holds the settings that describe connecting to a server
+//ServerConfig holds the settings that describe connecting to a server.
 type ServerConfig struct {
 	Address  string
 	Port     int
@@ -32,7 +32,7 @@ type ServerConfig struct {
 }
 
 //GetAddressStr returns the colon separated string of a serverconfigs
-//address and port
+//address and port.
 func (s *ServerConfig) GetAddressStr() string {
 	if s.Address == "" {
 		return ""
@@ -47,7 +47,7 @@ func (s *ServerConfig) GetAddressStr() string {
 //GetIncompleteDir returns the absolute directory path of the
 //Incomplete directory. This directory will keep inprogress downloads.
 //If the directory is not absolutely specified in the config,
-//the home environment variable will be used as the base
+//the home environment variable will be used as the base.
 func (c *Config) GetIncompleteDir() string {
 	if !path.IsAbs(c.IncompleteDir) {
 		return path.Join(os.Getenv("HOME"), c.IncompleteDir)
@@ -58,7 +58,7 @@ func (c *Config) GetIncompleteDir() string {
 //GetCompleteDir returns the absolute directory path of the
 //Complete directory. This directory will keep completed downloads.
 //If the directory is not absolutely specified in the config,
-//the home environment variable will be used as the base
+//the home environment variable will be used as the base.
 func (c *Config) GetCompleteDir() string {
 	if !path.IsAbs(c.CompleteDir) {
 		return path.Join(os.Getenv("HOME"), c.CompleteDir)
@@ -66,8 +66,6 @@ func (c *Config) GetCompleteDir() string {
 	return c.CompleteDir
 }
 
-//this is the default config that will be used if no config file could be
-//found
 var defaultConfig = Config{
 	IncompleteDir: "gonzbee/incomplete",
 	CompleteDir:   "gonzbee/complete",
@@ -155,4 +153,3 @@ func (c *Config) createDownloadDirs() error {
 	}
 	return nil
 }
-

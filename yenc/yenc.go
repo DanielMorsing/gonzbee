@@ -1,4 +1,4 @@
-//Package yenc gives a decoding interface for yEnc encoded binaries
+//Package yenc gives a decoding interface for yEnc encoded binaries.
 package yenc
 
 import (
@@ -11,22 +11,23 @@ import (
 	"strings"
 )
 
-//YencInfo holds the information needed in order to save the decoded file
-//in the right spot. It also holds the information needed in order to
-//assemble multipart yenc encoded files.
+//Part holds the information contained in a parsed yEnc header.
+//It also provides an interface to decoding the data in it.
+//Normally, you will need to read the Filename to find out which file to open
+//and Begin to know where to seek before writing.
 type Part struct {
-	Name      string
+	Filename  string
 	Begin     int64
 	Size      int64
-	Parts     int
-	Part      int
+	NumParts  int
+	Number    int
 	end       int64
 	multipart bool
 	br        *bufio.Reader
 }
 
-//bufio.Reader or bytes.Buffer are the most common types you will work on,
-//so use them directly instead of wrapping by using this interface
+//NewPart finds and parses the yEnc header in the reader and returns a
+//part to use for further decoding.
 func NewPart(r io.Reader) (*Part, error) {
 	y := new(Part)
 
@@ -43,13 +44,7 @@ func NewPart(r io.Reader) (*Part, error) {
 	return y, nil
 }
 
-//Decode will decode the content of a yEnc part. It returns the decoded
-//contents, the information needed in order to assemble a multipart binary
-//and an error, if any.
-//
-//Note that the error may be present, even though part of the file was
-//decoded. This tends to happen if there were dropped bytes, bad hash, or
-//badly formed yEnc footer.
+//Decode will decode the content of a yEnc part and write it to the passed writer. 
 func (y *Part) Decode(w io.Writer) error {
 	bw := bufio.NewWriter(w)
 	byteCount := 0
@@ -108,7 +103,7 @@ func (y *Part) Decode(w io.Writer) error {
 	return nil
 }
 
-func (p *Part) findHeader() error {
+func (y *Part) findHeader() error {
 	const (
 		StatePotential = iota
 		StateNormal
@@ -122,7 +117,7 @@ func (p *Part) findHeader() error {
 		if i == len(str) {
 			return nil
 		}
-		c, err := p.br.ReadByte()
+		c, err := y.br.ReadByte()
 		if err != nil {
 			return errors.New("Could not find header")
 		}
@@ -150,7 +145,7 @@ func (y *Part) parseHeader() error {
 		return err
 	}
 	//dealing with single part. don't handle partline
-	if y.Parts == 0 && y.Part == 0 {
+	if y.NumParts == 0 && y.Number == 0 {
 		return nil
 	}
 	err = y.parsePartline()
@@ -188,7 +183,7 @@ func (y *Part) parseDataline() error {
 			return errors.New("Malformed yEnc Attribute")
 		}
 	}
-	y.Name = dbuf.String()
+	y.Filename = dbuf.String()
 	return nil
 }
 
@@ -241,9 +236,9 @@ func (y *Part) handleAttrib(name, value string) error {
 		}
 	case "part":
 		//noone cares
-		_, err = fmt.Sscan(value, &y.Part)
+		_, err = fmt.Sscan(value, &y.Number)
 	case "total":
-		_, err = fmt.Sscan(value, &y.Parts)
+		_, err = fmt.Sscan(value, &y.NumParts)
 	case "begin":
 		_, err = fmt.Sscan(value, &y.Begin)
 		y.Begin--

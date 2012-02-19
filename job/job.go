@@ -110,7 +110,7 @@ func (j *job) handle() {
 				m = <-ret
 			}
 			part, _ := yenc.NewPart(m)
-			file, _ := os.Create(filepath.Join(j.dir, part.Name))
+			file, _ := os.Create(filepath.Join(j.dir, part.Filename))
 			file.Seek(part.Begin, os.SEEK_SET)
 			part.Decode(file)
 			m.Close()

@@ -1,4 +1,4 @@
-//Package nzb provides a function for parsing NZB files
+//Package nzb provides a function for parsing NZB files.
 package nzb
 
 import (
@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 )
 
-//Segment represents a single segment in a file
+//Segment represents a single segment in a file.
 type Segment struct {
 	//The amount of bytes
 	Bytes int `xml:"bytes,attr"`
@@ -20,7 +20,7 @@ type Segment struct {
 	MsgId string `xml:",chardata"`
 }
 
-//File represents a single file in the NZB file
+//File represents a single file in the NZB file.
 type File struct {
 	//The person who posted this to usenet
 	Poster string `xml:"poster,attr"`
@@ -35,15 +35,14 @@ type File struct {
 }
 
 //Nzb represents the top level for a NZB file
-//It's just a dumb struct to contain all the files
+//It's just a dumb struct to contain all the files.
 type Nzb struct {
 	//The files described in the NZB file
 	File []File `xml:"file"`
 }
 
-//Parse Nzb returns a pointer to a filled in Nzb struct, with the xml
-//document that it reads from r.
-//If there is an error, n will be nil and err will be non-nil
+//Parse parses an nzb document from the reader and returns
+//a Nzb struct and an error if any.
 func Parse(r io.Reader) (n *Nzb, err error) {
 	parser := xml.NewDecoder(r)
 	parser.CharsetReader = charsetter
