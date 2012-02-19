@@ -104,29 +104,37 @@ func (j *job) handle() {
 		wg.Add(1)
 		partsLeft := len(f.Segments)
 		go func(ret chan io.ReadCloser) {
-			m := <-ret
-			for m == nil {
-				partsLeft--
-				m = <-ret
-			}
-			part, _ := yenc.NewPart(m)
-			file, _ := os.Create(filepath.Join(j.dir, part.Filename))
-			file.Seek(part.Begin, os.SEEK_SET)
-			part.Decode(file)
-			m.Close()
-			partsLeft--
+			var file *os.File
+			var part *yenc.Part
+			var err error
+			defer wg.Done()
 			for ; partsLeft > 0; partsLeft-- {
-				m = <-ret
+				m := <-ret
 				if m == nil {
 					continue
 				}
-				part, _ := yenc.NewPart(m)
+				part, err = yenc.NewPart(m)
+				if err != nil {
+					log.Print(err.Error())
+					m.Close()
+					continue
+				}
+				if file == nil {
+					file, err = os.Create(filepath.Join(j.dir, part.Filename))
+					if err != nil {
+						panic("could not create file: " + err.Error())
+					}
+					defer file.Close()
+				}
 				file.Seek(part.Begin, os.SEEK_SET)
 				part.Decode(file)
 				m.Close()
 			}
-			file.Close()
-			wg.Done()
+			if part != nil {
+				log.Print("Done Decoding file " + part.Filename)
+			} else {
+				log.Print("Could not decode entire file")
+			}
 		}(ch)
 		for _, seg := range f.Segments {
 			msg := &messagejob{
