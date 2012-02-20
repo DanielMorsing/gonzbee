@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"gonzbee/config"
@@ -8,6 +9,8 @@ import (
 	"gonzbee/nzb"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 )
 
 func panicOn(err interface{}) {
@@ -15,6 +18,8 @@ func panicOn(err interface{}) {
 		panic(err)
 	}
 }
+
+var profile = flag.String("profile", "", "Where to save cpuprofile data")
 
 func main() {
 	defer func() {
@@ -25,6 +30,19 @@ func main() {
 		}
 	}()
 	flag.Parse()
+	runtime.GOMAXPROCS(4)
+	if *profile != "" {
+		pfile, err := os.Create(*profile)
+		if err != nil {
+			panic(errors.New("Could not open profile file"))
+		}
+		err = pprof.StartCPUProfile(pfile)
+		if err != nil {
+			panic(err)
+		}
+		defer pfile.Close()
+		defer pprof.StopCPUProfile()
+	}
 
 	fmt.Println(config.C)
 	nzbPath := flag.Arg(0)
