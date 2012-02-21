@@ -103,13 +103,13 @@ func (j *job) handle() {
 		ch := make(chan io.ReadCloser)
 		wg.Add(1)
 		partsLeft := len(f.Segments)
-		go func(ret chan io.ReadCloser) {
+		go func() {
 			var file *os.File
 			var part *yenc.Part
 			var err error
 			defer wg.Done()
 			for ; partsLeft > 0; partsLeft-- {
-				m := <-ret
+				m := <-ch
 				if m == nil {
 					continue
 				}
@@ -135,7 +135,7 @@ func (j *job) handle() {
 			} else {
 				log.Print("Could not decode entire file")
 			}
-		}(ch)
+		}()
 		for _, seg := range f.Segments {
 			msg := &messagejob{
 				msgId: seg.MsgId,
