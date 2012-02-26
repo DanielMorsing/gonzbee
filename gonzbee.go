@@ -20,8 +20,9 @@ func panicOn(err interface{}) {
 }
 
 var (
-	profile = flag.String("profile", "", "Where to save cpuprofile data")
-	rm      = flag.Bool("rm", false, "Remove the nzb file after downloading")
+	cpuprofile = flag.String("cpuprofile", "", "Where to save cpuprofile data")
+	memprofile = flag.String("memprofile", "", "Where to save memory profile data")
+	rm         = flag.Bool("rm", false, "Remove the nzb file after downloading")
 )
 
 func main() {
@@ -34,16 +35,16 @@ func main() {
 	}()
 	flag.Parse()
 	runtime.GOMAXPROCS(4)
-	if *profile != "" {
-		pfile, err := os.Create(*profile)
+	if *cpuprofile != "" {
+		pfile, err := os.Create(*cpuprofile)
 		if err != nil {
-			panic(errors.New("Could not open profile file"))
+			panic(errors.New("Could not create profile file"))
 		}
+		defer pfile.Close()
 		err = pprof.StartCPUProfile(pfile)
 		if err != nil {
 			panic(err)
 		}
-		defer pfile.Close()
 		defer pprof.StopCPUProfile()
 	}
 
@@ -61,4 +62,16 @@ func main() {
 	}
 
 	job.Start(n, filepath.Base(nzbPath))
+
+	if *memprofile != "" {
+		pfile, err := os.Create(*memprofile)
+		if err != nil {
+			panic(errors.New("Could not create profile file"))
+		}
+		defer pfile.Close()
+		err = pprof.WriteHeapProfile(pfile)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
