@@ -19,7 +19,10 @@ func panicOn(err interface{}) {
 	}
 }
 
-var profile = flag.String("profile", "", "Where to save cpuprofile data")
+var (
+	profile = flag.String("profile", "", "Where to save cpuprofile data")
+	rm      = flag.Bool("rm", false, "Remove the nzb file after downloading")
+)
 
 func main() {
 	defer func() {
@@ -52,6 +55,10 @@ func main() {
 	n, err := nzb.Parse(file)
 	panicOn(err)
 	file.Close()
+	if *rm {
+		err = os.Remove(nzbPath)
+		panicOn(err)
+	}
 
 	job.Start(n, filepath.Base(nzbPath))
 }
