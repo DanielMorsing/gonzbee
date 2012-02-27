@@ -4,8 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"gonzbee/config"
-	"gonzbee/job"
 	"gonzbee/nzb"
 	"os"
 	"path/filepath"
@@ -48,7 +46,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	fmt.Println(config.C)
+	fmt.Println(config)
 	nzbPath := flag.Arg(0)
 	file, err := os.Open(nzbPath)
 	panicOn(err)
@@ -61,7 +59,7 @@ func main() {
 		panicOn(err)
 	}
 
-	job.Start(n, filepath.Base(nzbPath))
+	jobStart(n, filepath.Base(nzbPath))
 
 	if *memprofile != "" {
 		pfile, err := os.Create(*memprofile)

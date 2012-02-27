@@ -1,6 +1,4 @@
-//Package config is responsible for keeping a relevant config of
-//the gonzbee downloader.
-package config
+package main
 
 import (
 	"encoding/json"
@@ -10,11 +8,11 @@ import (
 	"path"
 )
 
-//The C variable is the general interface to the config package.
+//The config variable is the general interface to the config package.
 //
 //You get the various settings from this variable which is populated
 //at init time.
-var C Config
+var config = newConfig()
 
 type Config struct {
 	IncompleteDir string
@@ -71,7 +69,7 @@ var defaultConfig = Config{
 	CompleteDir:   "gonzbee/complete",
 }
 
-func init() {
+func newConfig() *Config {
 	//this is very unix specific, beware eventual porters
 	homeDir := os.Getenv("HOME")
 	if homeDir == "" {
@@ -84,20 +82,21 @@ func init() {
 	}
 	//check if a config file exists
 	configPath := path.Join(configDir, "config")
-	err = readConfigFile(configPath)
+	c, err := readConfigFile(configPath)
 	if err != nil {
 		panic(fmt.Errorf("Cannot Get Config: %s", err.Error()))
 	}
-	err = C.setup()
+	err = c.setup()
 	if err != nil {
 		panic(fmt.Errorf("Cannot Get Config: %s", err.Error()))
 	}
+	return c
 }
 
-func readConfigFile(path string) error {
+func readConfigFile(path string) (*Config, error) {
 	file, created, err := openOrCreate(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer file.Close()
 
@@ -107,23 +106,26 @@ func readConfigFile(path string) error {
 	return existingConfig(file)
 }
 
-func firstConfig(file *os.File) error {
+func firstConfig(file *os.File) (*Config, error) {
 	config, err := json.MarshalIndent(defaultConfig, "", "\t")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_, err = file.Write(config)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	C = defaultConfig
-	return err
+	return &defaultConfig, nil
 }
 
-func existingConfig(file *os.File) error {
+func existingConfig(file *os.File) (*Config, error) {
+	c := new(Config)
 	enc := json.NewDecoder(file)
-	err := enc.Decode(&C)
-	return err
+	err := enc.Decode(c)
+	if err != nil {
+		return nil, err
+	}
+	return c, err
 }
 
 func openOrCreate(path string) (*os.File, bool, error) {
