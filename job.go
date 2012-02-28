@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"gonzbee/nntp"
 	"gonzbee/nzb"
 	"gonzbee/yenc"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,7 +20,7 @@ type job struct {
 type messagejob struct {
 	group string
 	msgId string
-	ch    chan io.ReadCloser
+	ch    chan []byte
 }
 
 func init() {
@@ -59,23 +59,18 @@ func newConnection() error {
 				if err != nil {
 					panic(err)
 				}
-				b, err := n.GetMessageReader(m.msgId)
+				b, err := n.GetMessage(m.msgId)
 				if err != nil {
 					log.Print("Error getting Message ", m.msgId, ": ", err.Error())
 				}
 				m.ch <- b
-			case <-(after(10 * time.Second)):
+			case <-(time.After(10 * time.Second)):
 				reaper <- 1
 				return
 			}
 		}
 	}()
 	return nil
-}
-
-func after(d time.Duration) <-chan time.Time {
-	t := time.NewTimer(d)
-	return t.C
 }
 
 func poolHandler() {
@@ -99,7 +94,7 @@ func poolHandler() {
 func (j *job) handle() {
 	wg := new(sync.WaitGroup)
 	for _, f := range j.n.File {
-		ch := make(chan io.ReadCloser)
+		ch := make(chan []byte)
 		wg.Add(1)
 		partsLeft := len(f.Segments)
 		go func() {
@@ -108,14 +103,13 @@ func (j *job) handle() {
 			var err error
 			defer wg.Done()
 			for ; partsLeft > 0; partsLeft-- {
-				m := <-ch
+				m := bytes.NewReader(<-ch)
 				if m == nil {
 					continue
 				}
 				part, err = yenc.NewPart(m)
 				if err != nil {
 					log.Print(err.Error())
-					m.Close()
 					continue
 				}
 				if file == nil {
@@ -127,7 +121,6 @@ func (j *job) handle() {
 				}
 				file.Seek(part.Begin, os.SEEK_SET)
 				part.Decode(file)
-				m.Close()
 			}
 			if part != nil {
 				log.Print("Done Decoding file " + part.Filename)
