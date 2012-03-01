@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"gonzbee/nzb"
 	"os"
+	"io/ioutil"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -18,8 +20,7 @@ func panicOn(err interface{}) {
 }
 
 var (
-	cpuprofile = flag.String("cpuprofile", "", "Where to save cpuprofile data")
-	memprofile = flag.String("memprofile", "", "Where to save memory profile data")
+	profile = flag.String("profile", "", "Where to save profile data")
 	rm         = flag.Bool("rm", false, "Remove the nzb file after downloading")
 )
 
@@ -33,8 +34,9 @@ func main() {
 	}()
 	flag.Parse()
 	runtime.GOMAXPROCS(4)
-	if *cpuprofile != "" {
-		pfile, err := os.Create(*cpuprofile)
+	if *profile != "" {
+		cpuprof := *profile + ".pprof"
+		pfile, err := os.Create(cpuprof)
 		if err != nil {
 			panic(errors.New("Could not create profile file"))
 		}
@@ -61,13 +63,25 @@ func main() {
 
 	jobStart(n, filepath.Base(nzbPath))
 
-	if *memprofile != "" {
-		pfile, err := os.Create(*memprofile)
+	if *profile != "" {
+		memprof := *profile + ".memprof"
+		pfile, err := os.Create(memprof)
 		if err != nil {
 			panic(errors.New("Could not create profile file"))
 		}
 		defer pfile.Close()
 		err = pprof.WriteHeapProfile(pfile)
+		if err != nil {
+			panic(err)
+		}
+
+		var memstat runtime.MemStats
+		runtime.ReadMemStats(&memstat)
+		b, err := json.MarshalIndent(memstat, "", "\t")
+		if err != nil {
+			panic(err)
+		}
+		err = ioutil.WriteFile(*profile + ".memstats", b, 0644)
 		if err != nil {
 			panic(err)
 		}
