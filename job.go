@@ -103,10 +103,11 @@ func (j *job) handle() {
 			var err error
 			defer wg.Done()
 			for ; partsLeft > 0; partsLeft-- {
-				m := bytes.NewReader(<-ch)
-				if m == nil {
+				s := <-ch
+				if s == nil {
 					continue
 				}
+				m := bytes.NewReader(s)
 				part, err = yenc.NewPart(m)
 				if err != nil {
 					log.Print(err.Error())
