@@ -94,7 +94,7 @@ func poolHandler() {
 func (j *job) handle() {
 	wg := new(sync.WaitGroup)
 	for _, f := range j.n.File {
-		ch := make(chan []byte)
+		ch := make(chan []byte, 1024)
 		wg.Add(1)
 		partsLeft := len(f.Segments)
 		go func() {
