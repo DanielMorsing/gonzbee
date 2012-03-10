@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -102,7 +103,7 @@ func (c *charsetReader) Read(b []byte) (n int, err error) {
 //nzb files are almost always in iso8859-1, so provide a converter so that
 //go's utf-8 world can handle it
 func charsetter(charset string, input io.Reader) (r io.Reader, err error) {
-	if charset != "iso-8859-1" {
+	if strings.ToLower(charset) != "iso-8859-1" {
 		err = errors.New("Cannot handle charset")
 		return
 	}
