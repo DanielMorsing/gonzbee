@@ -7,6 +7,7 @@ import (
 	"gonzbee/yenc"
 	"log"
 	"os"
+	"io"
 	"path/filepath"
 	"sync"
 	"time"
@@ -121,7 +122,7 @@ func (j *job) handle() {
 					defer file.Close()
 				}
 				file.Seek(part.Begin, os.SEEK_SET)
-				part.Decode(file)
+				io.Copy(file, part)
 			}
 			if part != nil {
 				log.Print("Done Decoding file " + part.Filename)

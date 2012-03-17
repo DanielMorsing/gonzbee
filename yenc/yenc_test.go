@@ -1,7 +1,6 @@
 package yenc_test
 
 import (
-	"bytes"
 	. "gonzbee/yenc"
 	"io/ioutil"
 	"os"
@@ -60,12 +59,11 @@ func TestSinglepartDecode(t *testing.T) {
 
 	checkPart(t, yenc, &data)
 
-	buf := bytes.Buffer{}
-	err = yenc.Decode(&buf)
+	buf, err := ioutil.ReadAll(yenc)
 	checkErr(t, err)
 
 	//check if it's the same as the expected value
-	if !reflect.DeepEqual(buf.Bytes(), exp) {
+	if !reflect.DeepEqual(buf, exp) {
 		t.Errorf("binaries differ")
 	}
 }
@@ -83,8 +81,7 @@ func TestMultipartDecode(t *testing.T) {
 		number: 1,
 	}
 	checkPart(t, yenc, &data)
-	buf1 := bytes.Buffer{}
-	err = yenc.Decode(&buf1)
+	buf1, err := ioutil.ReadAll(yenc)
 	checkErr(t, err)
 
 	dec, err = os.Open("testdata/00000021.ntx")
@@ -99,13 +96,12 @@ func TestMultipartDecode(t *testing.T) {
 
 	yenc, err = NewPart(dec)
 	checkPart(t, yenc, &data)
-	buf2 := bytes.Buffer{}
-	err = yenc.Decode(&buf2)
+	buf2, err := ioutil.ReadAll(yenc)
 	checkErr(t, err)
 
 	exp, err := ioutil.ReadFile("testdata/joystick.jpg")
 	checkErr(t, err)
-	decoded := append(buf1.Bytes(), buf2.Bytes()...)
+	decoded := append(buf1, buf2...)
 	if !reflect.DeepEqual(exp, decoded) {
 		t.Errorf("binaries differ")
 	}

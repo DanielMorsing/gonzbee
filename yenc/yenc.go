@@ -6,13 +6,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"hash"
 	"hash/crc32"
 	"io"
 	"strings"
 )
 
 //Part holds the information contained in a parsed yEnc header.
-//It also provides an interface to decoding the data in it.
+//It also implements the read interface for easy decoding.
 //Normally, you will need to read the Filename to find out which file to open
 //and Begin to know where to seek before writing.
 type Part struct {
@@ -24,6 +25,8 @@ type Part struct {
 	end       int64
 	multipart bool
 	br        *bufio.Reader
+	crc       hash.Hash32
+	byteCount int
 }
 
 //NewPart finds and parses the yEnc header in the reader and returns a
@@ -41,19 +44,18 @@ func NewPart(r io.Reader) (*Part, error) {
 	if err != nil {
 		return nil, err
 	}
+	y.crc = crc32.NewIEEE()
 	return y, nil
 }
 
-//Decode will decode the content of a yEnc part and write it to the passed writer. 
-func (y *Part) Decode(w io.Writer) error {
-	bw := bufio.NewWriter(w)
-	byteCount := 0
-	crc := crc32.NewIEEE()
-	crcw := bufio.NewWriter(crc)
-	for {
-		tok, err := y.br.ReadByte()
+//Read will read the content of a yEnc part, obeying the normal read rules
+func (y *Part) Read(b []byte) (n int, err error) {
+	for n < len(b) {
+		var tok byte
+		tok, err = y.br.ReadByte()
 		if err != nil {
-			return errors.New("Unexpected End-of-File")
+			err = errors.New("Unexpected End-of-File")
+			return
 		}
 		if tok == '\n' {
 			continue
@@ -61,33 +63,33 @@ func (y *Part) Decode(w io.Writer) error {
 		if tok == '=' {
 			tok, err = y.br.ReadByte()
 			if err != nil {
-				return errors.New("Unexpected End-of-File")
+				err = errors.New("Unexpected End-of-File")
+				return
 			}
 			if tok == 'y' {
-				break
+				y.crc.Write(b[:n])
+				err = y.epilogue()
+				return
 			}
 			tok -= 64
 		}
 		var c byte
 		c = tok - 42
-		err = bw.WriteByte(c)
-		if err != nil {
-			return errors.New("I/O Error")
-		}
-		crcw.WriteByte(c)
-		byteCount++
+		b[n] = c
+		n++
+		y.byteCount++
 	}
-	err := bw.Flush()
-	if err != nil {
-		return errors.New("I/O Error")
-	}
-	crcw.Flush()
+	y.crc.Write(b[:n])
+	return
+}
+
+func (y *Part) epilogue() error {
 	footer, err := y.parseFooter()
 	if err != nil {
 		return fmt.Errorf("Could not verify decoding: %s", err.Error())
 	}
 
-	if footer.size != byteCount {
+	if footer.size != y.byteCount {
 		return errors.New("Could not verify decoding: Sizes differ")
 	}
 	var crcp *uint32
@@ -97,10 +99,10 @@ func (y *Part) Decode(w io.Writer) error {
 		crcp = &footer.crc
 	}
 
-	if *crcp != crc.Sum32() {
+	if *crcp != y.crc.Sum32() {
 		return errors.New("Could not verify decoding: Bad CRC")
 	}
-	return nil
+	return io.EOF
 }
 
 func (y *Part) findHeader() error {
