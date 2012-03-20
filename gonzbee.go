@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"gonzbee/nzb"
+	"github.com/DanielMorsing/gonzbee/nzb"
 	"os"
 	"io/ioutil"
 	"path/filepath"

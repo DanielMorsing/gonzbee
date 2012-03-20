@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
-	"gonzbee/nntp"
-	"gonzbee/nzb"
-	"gonzbee/yenc"
+	"github.com/DanielMorsing/gonzbee/nntp"
+	"github.com/DanielMorsing/gonzbee/nzb"
+	"github.com/DanielMorsing/gonzbee/yenc"
 	"log"
 	"os"
 	"io"
