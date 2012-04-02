@@ -1,37 +1,27 @@
 package main
 
 import (
-	"errors"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/DanielMorsing/gonzbee/nzb"
-	"os"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 )
 
-func panicOn(err interface{}) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 var (
-	profile = flag.String("profile", "", "Where to save profile data")
-	rm         = flag.Bool("rm", false, "Remove the nzb file after downloading")
+	profile   = flag.String("profile", "", "Where to save profile data")
+	rm        = flag.Bool("rm", false, "Remove the nzb file after downloading")
+	saveDir   = flag.String("d", "", "Save to this directory")
+	aggregate = flag.String("a", "", "Save all files in all NZBs in this directory")
 )
 
 func main() {
-	defer func() {
-		if e := recover(); e != nil {
-			err := e.(error)
-			fmt.Fprintln(os.Stdout, err.Error())
-			os.Exit(1)
-		}
-	}()
 	flag.Parse()
 	runtime.GOMAXPROCS(4)
 	if *profile != "" {
@@ -49,19 +39,33 @@ func main() {
 	}
 
 	fmt.Println(config)
-	nzbPath := flag.Arg(0)
-	file, err := os.Open(nzbPath)
-	panicOn(err)
+	for _, path := range flag.Args() {
+		file, err := ioutil.ReadFile(path)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			continue
+		}
 
-	n, err := nzb.Parse(file)
-	panicOn(err)
-	file.Close()
-	if *rm {
-		err = os.Remove(nzbPath)
-		panicOn(err)
+		nzb, err := nzb.Parse(bytes.NewBuffer(file))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			continue
+		}
+
+		var downloadDir string
+		if *aggregate != "" {
+			downloadDir = *aggregate
+		} else {
+			downloadDir = filepath.Base(path)
+		}
+		jobStart(nzb, downloadDir, *saveDir)
+		if *rm {
+			err = os.Remove(path)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+			}
+		}
 	}
-
-	jobStart(n, filepath.Base(nzbPath))
 
 	if *profile != "" {
 		memprof := *profile + ".memprof"
@@ -81,7 +85,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		err = ioutil.WriteFile(*profile + ".memstats", b, 0644)
+		err = ioutil.WriteFile(*profile+".memstats", b, 0644)
 		if err != nil {
 			panic(err)
 		}

@@ -5,9 +5,9 @@ import (
 	"github.com/DanielMorsing/gonzbee/nntp"
 	"github.com/DanielMorsing/gonzbee/nzb"
 	"github.com/DanielMorsing/gonzbee/yenc"
+	"io"
 	"log"
 	"os"
-	"io"
 	"path/filepath"
 	"sync"
 	"time"
@@ -33,10 +33,10 @@ var downloadMux = make(chan *messagejob)
 var reaper = make(chan int)
 
 func newConnection() error {
-	s := config.Server.GetAddressStr()
+	s := config.GetAddressStr()
 	var err error
 	var n *nntp.Conn
-	if config.Server.TLS {
+	if config.TLS {
 		n, err = nntp.DialTLS(s)
 	} else {
 		n, err = nntp.Dial(s)
@@ -45,7 +45,7 @@ func newConnection() error {
 		return err
 	}
 
-	err = n.Authenticate(config.Server.Username, config.Server.Password)
+	err = n.Authenticate(config.Username, config.Password)
 	if err != nil {
 		n.Close()
 		return err
@@ -142,9 +142,8 @@ func (j *job) handle() {
 	wg.Wait()
 }
 
-func jobStart(n *nzb.Nzb, name string) {
-	incDir := config.GetIncompleteDir()
-	workDir := filepath.Join(incDir, name)
+func jobStart(n *nzb.Nzb, name string, dir string) {
+	workDir := filepath.Join(dir, name)
 	os.Mkdir(workDir, 0777)
 	j := &job{
 		dir: workDir,

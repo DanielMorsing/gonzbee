@@ -14,12 +14,6 @@ import (
 //at init time.
 var config = newConfig()
 
-type Config struct {
-	IncompleteDir string
-	CompleteDir   string
-	Server        ServerConfig
-}
-
 //ServerConfig holds the settings that describe connecting to a server.
 type ServerConfig struct {
 	Address  string
@@ -42,34 +36,7 @@ func (s *ServerConfig) GetAddressStr() string {
 	return fmt.Sprintf("%v:%d", s.Address, port)
 }
 
-//GetIncompleteDir returns the absolute directory path of the
-//Incomplete directory. This directory will keep inprogress downloads.
-//If the directory is not absolutely specified in the config,
-//the home environment variable will be used as the base.
-func (c *Config) GetIncompleteDir() string {
-	if !path.IsAbs(c.IncompleteDir) {
-		return path.Join(os.Getenv("HOME"), c.IncompleteDir)
-	}
-	return c.IncompleteDir
-}
-
-//GetCompleteDir returns the absolute directory path of the
-//Complete directory. This directory will keep completed downloads.
-//If the directory is not absolutely specified in the config,
-//the home environment variable will be used as the base.
-func (c *Config) GetCompleteDir() string {
-	if !path.IsAbs(c.CompleteDir) {
-		return path.Join(os.Getenv("HOME"), c.CompleteDir)
-	}
-	return c.CompleteDir
-}
-
-var defaultConfig = Config{
-	IncompleteDir: "gonzbee/incomplete",
-	CompleteDir:   "gonzbee/complete",
-}
-
-func newConfig() *Config {
+func newConfig() *ServerConfig {
 	//this is very unix specific, beware eventual porters
 	homeDir := os.Getenv("HOME")
 	if homeDir == "" {
@@ -86,14 +53,10 @@ func newConfig() *Config {
 	if err != nil {
 		panic(fmt.Errorf("Cannot Get Config: %s", err.Error()))
 	}
-	err = c.setup()
-	if err != nil {
-		panic(fmt.Errorf("Cannot Get Config: %s", err.Error()))
-	}
 	return c
 }
 
-func readConfigFile(path string) (*Config, error) {
+func readConfigFile(path string) (*ServerConfig, error) {
 	file, created, err := openOrCreate(path)
 	if err != nil {
 		return nil, err
@@ -106,8 +69,9 @@ func readConfigFile(path string) (*Config, error) {
 	return existingConfig(file)
 }
 
-func firstConfig(file *os.File) (*Config, error) {
-	config, err := json.MarshalIndent(defaultConfig, "", "\t")
+func firstConfig(file *os.File) (*ServerConfig, error) {
+	s := ServerConfig{}
+	config, err := json.MarshalIndent(s, "", "\t")
 	if err != nil {
 		return nil, err
 	}
@@ -115,11 +79,11 @@ func firstConfig(file *os.File) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &defaultConfig, nil
+	return &s, nil
 }
 
-func existingConfig(file *os.File) (*Config, error) {
-	c := new(Config)
+func existingConfig(file *os.File) (*ServerConfig, error) {
+	c := new(ServerConfig)
 	enc := json.NewDecoder(file)
 	err := enc.Decode(c)
 	if err != nil {
@@ -135,23 +99,4 @@ func openOrCreate(path string) (*os.File, bool, error) {
 		return file, false, err
 	}
 	return file, true, err
-}
-
-func (c *Config) setup() error {
-	return c.createDownloadDirs()
-}
-
-func (c *Config) createDownloadDirs() error {
-	dirPath := c.GetIncompleteDir()
-	err := os.MkdirAll(dirPath, 0777)
-	if err != nil {
-		return err
-	}
-
-	dirPath = c.GetCompleteDir()
-	err = os.MkdirAll(dirPath, 0777)
-	if err != nil {
-		return err
-	}
-	return nil
 }
