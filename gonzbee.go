@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/pprof"
 )
@@ -20,6 +21,8 @@ var (
 	saveDir   = flag.String("d", "", "Save to this directory")
 	aggregate = flag.String("a", "", "Save all files in all NZBs in this directory")
 )
+
+var extStrip = regexp.MustCompile(`\.nzb$`)
 
 func main() {
 	flag.Parse()
@@ -39,6 +42,10 @@ func main() {
 	}
 
 	fmt.Println(config)
+	if flag.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "No NZB files given")
+		os.Exit(1)
+	}
 	for _, path := range flag.Args() {
 		file, err := ioutil.ReadFile(path)
 		if err != nil {
@@ -56,7 +63,7 @@ func main() {
 		if *aggregate != "" {
 			downloadDir = *aggregate
 		} else {
-			downloadDir = filepath.Base(path)
+			downloadDir = extStrip.ReplaceAllString(filepath.Base(path), "")
 		}
 		jobStart(nzb, downloadDir, *saveDir)
 		if *rm {
