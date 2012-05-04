@@ -82,11 +82,11 @@ func (j *job) handle() {
 		var fileClose sync.WaitGroup
 		fileClose.Add(len(f.Segments))
 		for _, s := range f.Segments {
+			ch := make(chan *nntp.Conn)
+			downloaderRq <- ch
+			conn := <-ch
 			go func(seg nzb.Segment, f nzb.File) {
 				defer fileClose.Done()
-				ch := make(chan *nntp.Conn)
-				downloaderRq <- ch
-				conn := <-ch
 				defer func() {
 					downloadReaper <- conn
 				}()
