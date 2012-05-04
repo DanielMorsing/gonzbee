@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"github.com/DanielMorsing/gonzbee/nntp"
 	"github.com/DanielMorsing/gonzbee/nzb"
 	"github.com/DanielMorsing/gonzbee/yenc"
@@ -10,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 )
 
 type job struct {
@@ -18,128 +16,119 @@ type job struct {
 	n   *nzb.Nzb
 }
 
-type messagejob struct {
-	group string
-	msgId string
-	ch    chan []byte
-}
+var downloaderRq = make(chan chan *nntp.Conn)
+var downloadReaper = make(chan *nntp.Conn, 1024)
 
 func init() {
-	go poolHandler()
+	go connectionHandler()
 }
 
-var download = make(chan *messagejob)
-var downloadMux = make(chan *messagejob)
-var reaper = make(chan int)
-
-func newConnection() error {
-	s := config.GetAddressStr()
+func spinUp() *nntp.Conn {
+	str := config.GetAddressStr()
+	var conn *nntp.Conn
 	var err error
-	var n *nntp.Conn
 	if config.TLS {
-		n, err = nntp.DialTLS(s)
+		conn, err = nntp.DialTLS(str)
 	} else {
-		n, err = nntp.Dial(s)
+		conn, err = nntp.Dial(str)
 	}
 	if err != nil {
-		return err
+		return nil
 	}
-
-	err = n.Authenticate(config.Username, config.Password)
+	err = conn.Authenticate(config.Username, config.Password)
 	if err != nil {
-		n.Close()
-		return err
+		return nil
 	}
-	log.Println("spun up nntp connection")
-	go func() {
-		defer n.Close()
-		for {
-			select {
-			case m := <-downloadMux:
-				err = n.SwitchGroup(m.group)
-				if err != nil {
-					panic(err)
-				}
-				b, err := n.GetMessage(m.msgId)
-				if err != nil {
-					log.Print("Error getting Message ", m.msgId, ": ", err.Error())
-				}
-				m.ch <- b
-			case <-(time.After(10 * time.Second)):
-				reaper <- 1
-				return
-			}
-		}
-	}()
-	return nil
+	return conn
 }
 
-func poolHandler() {
+func connectionHandler() {
 	var number int
 	for {
-		select {
-		case msg := <-download:
-			if number < 10 {
-				err := newConnection()
-				if err == nil {
-					number++
-				}
+		ch := <-downloaderRq
+		var conn *nntp.Conn
+		if number < 10 {
+			conn = spinUp()
+			if conn == nil {
+				continue
 			}
-			downloadMux <- msg
-		case <-reaper:
-			number--
+			log.Print("Spun up connection #", number+1)
+			number++
+			ch <- conn
+			continue
 		}
+		conn = <-downloadReaper
+		ch <- conn
 	}
+}
+
+type offsetWriter struct {
+	offset int64
+	io.WriterAt
+}
+
+func (ow *offsetWriter) Write(b []byte) (n int, err error) {
+	n, err = ow.WriteAt(b, ow.offset)
+	ow.offset += int64(n)
+	return
 }
 
 func (j *job) handle() {
-	wg := new(sync.WaitGroup)
+	var jobDone sync.WaitGroup
+	jobDone.Add(len(j.n.File))
 	for _, f := range j.n.File {
-		ch := make(chan []byte, 1024)
-		wg.Add(1)
-		partsLeft := len(f.Segments)
-		go func() {
-			var file *os.File
-			var part *yenc.Part
-			var err error
-			defer wg.Done()
-			for ; partsLeft > 0; partsLeft-- {
-				s := <-ch
-				if s == nil {
-					continue
-				}
-				m := bytes.NewReader(s)
-				part, err = yenc.NewPart(m)
+		var fileinit sync.Once
+		var file *os.File
+		var fileClose sync.WaitGroup
+		fileClose.Add(len(f.Segments))
+		for _, s := range f.Segments {
+			go func(seg nzb.Segment, f nzb.File) {
+				defer fileClose.Done()
+				ch := make(chan *nntp.Conn)
+				downloaderRq <- ch
+				conn := <-ch
+				defer func() {
+					downloadReaper <- conn
+				}()
+
+				err := conn.SwitchGroup(f.Groups[0])
 				if err != nil {
-					log.Print(err.Error())
-					continue
+					return
 				}
-				if file == nil {
+
+				reader, err := conn.GetMessageReader(seg.MsgId)
+				if err != nil {
+					return
+				}
+				defer reader.Close()
+
+				part, err := yenc.NewPart(reader)
+				if err != nil {
+					return
+				}
+
+				fileinit.Do(func() {
 					file, err = os.Create(filepath.Join(j.dir, part.Filename))
 					if err != nil {
-						panic("could not create file: " + err.Error())
+						os.Exit(1)
 					}
-					defer file.Close()
+					go func() {
+						fileClose.Wait()
+						file.Close()
+						jobDone.Done()
+						log.Printf("Done downloading file \"%s\"\n", part.Filename)
+					}()
+				})
+
+				ow := &offsetWriter{
+					offset:   part.Begin,
+					WriterAt: file,
 				}
-				file.Seek(part.Begin, os.SEEK_SET)
-				io.Copy(file, part)
-			}
-			if part != nil {
-				log.Print("Done Decoding file " + part.Filename)
-			} else {
-				log.Print("Could not decode entire file")
-			}
-		}()
-		for _, seg := range f.Segments {
-			msg := &messagejob{
-				msgId: seg.MsgId,
-				group: f.Groups[0],
-				ch:    ch,
-			}
-			download <- msg
+				io.Copy(ow, part)
+			}(s, f)
 		}
 	}
-	wg.Wait()
+	jobDone.Wait()
 }
 
 func jobStart(n *nzb.Nzb, name string, dir string) {
