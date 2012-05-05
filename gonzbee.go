@@ -26,7 +26,6 @@ var extStrip = regexp.MustCompile(`\.nzb$`)
 
 func main() {
 	flag.Parse()
-	runtime.GOMAXPROCS(4)
 	if *profile != "" {
 		cpuprof := *profile + ".pprof"
 		pfile, err := os.Create(cpuprof)
