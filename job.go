@@ -81,6 +81,11 @@ func (j *job) handle() {
 		var file *os.File
 		var fileClose sync.WaitGroup
 		fileClose.Add(len(f.Segments))
+		go func() {
+			fileClose.Wait()
+			file.Close()
+			jobDone.Done()
+		}()
 		for _, s := range f.Segments {
 			ch := make(chan *nntp.Conn)
 			downloaderRq <- ch
@@ -114,8 +119,6 @@ func (j *job) handle() {
 					}
 					go func() {
 						fileClose.Wait()
-						file.Close()
-						jobDone.Done()
 						log.Printf("Done downloading file \"%s\"\n", part.Filename)
 					}()
 				})
