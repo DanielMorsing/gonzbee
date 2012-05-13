@@ -142,21 +142,27 @@ func (j *job) handle() {
 	jobDone.Wait()
 }
 
-func existDir(path string) bool {
+func mkdir(path string) error {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return false
+		if os.IsNotExist(err) {
+			return os.Mkdir(path, 0777)
+		}
+		return err
 	}
-	return fi.IsDir()
+	if fi.IsDir() {
+		return nil
+	} else {
+		return os.ErrExist
+	}
+	panic("unreachable")
 }
 
 func jobStart(n *nzb.Nzb, name string, dir string) error {
 	workDir := filepath.Join(dir, name)
-	if !existDir(workDir) {
-		err := os.Mkdir(workDir, 0777)
-		if err != nil {
-			return err
-		}
+	err := mkdir(workDir)
+	if err != nil {
+		return err
 	}
 	j := &job{
 		dir: workDir,
