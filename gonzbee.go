@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -46,13 +45,13 @@ func main() {
 		os.Exit(1)
 	}
 	for _, path := range flag.Args() {
-		file, err := ioutil.ReadFile(path)
+		file, err := os.Open(path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			continue
 		}
 
-		nzb, err := nzb.Parse(bytes.NewBuffer(file))
+		nzb, err := nzb.Parse(file)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			continue
@@ -64,7 +63,11 @@ func main() {
 		} else {
 			downloadDir = extStrip.ReplaceAllString(filepath.Base(path), "")
 		}
-		jobStart(nzb, downloadDir, *saveDir)
+		err = jobStart(nzb, downloadDir, *saveDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not download job: %s\n", err.Error())
+			continue
+		}
 		if *rm {
 			err = os.Remove(path)
 			if err != nil {

@@ -100,17 +100,20 @@ func (j *job) handle() {
 
 				err := conn.SwitchGroup(f.Groups[0])
 				if err != nil {
+					log.Println("Could not switch to group:", err.Error())
 					return
 				}
 
 				reader, err := conn.GetMessageReader(seg.MsgId)
 				if err != nil {
+					log.Printf("Could Download MsgId \"%s\": %s\n", seg.MsgId, err.Error())
 					return
 				}
 				defer reader.Close()
 
 				part, err := yenc.NewPart(reader)
 				if err != nil {
+					log.Printf("Could Decode MsgId \"%s\": %s\n", seg.MsgId, err.Error())
 					return
 				}
 
@@ -129,19 +132,36 @@ func (j *job) handle() {
 					offset:   part.Begin,
 					WriterAt: file,
 				}
-				io.Copy(ow, part)
+				_, err = io.Copy(ow, part)
+				if err != nil {
+					log.Println("Error getting segment:", err.Error())
+				}
 			}(s, f)
 		}
 	}
 	jobDone.Wait()
 }
 
-func jobStart(n *nzb.Nzb, name string, dir string) {
+func existDir(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.IsDir()
+}
+
+func jobStart(n *nzb.Nzb, name string, dir string) error {
 	workDir := filepath.Join(dir, name)
-	os.Mkdir(workDir, 0777)
+	if !existDir(workDir) {
+		err := os.Mkdir(workDir, 0777)
+		if err != nil {
+			return err
+		}
+	}
 	j := &job{
 		dir: workDir,
 		n:   n,
 	}
 	j.handle()
+	return nil
 }
