@@ -83,7 +83,9 @@ func (j *job) handle() {
 		fileClose.Add(len(f.Segments))
 		go func() {
 			fileClose.Wait()
-			file.Close()
+			if file != nil {
+				file.Close()
+			}
 			jobDone.Done()
 		}()
 		for _, s := range f.Segments {
