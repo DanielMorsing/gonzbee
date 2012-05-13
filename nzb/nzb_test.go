@@ -1,7 +1,7 @@
 package nzb_test
 
 import (
-	. "gonzbee/nzb"
+	. "github.com/DanielMorsing/gonzbee/nzb"
 	"reflect"
 	"strings"
 	"testing"

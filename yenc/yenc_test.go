@@ -1,7 +1,7 @@
 package yenc_test
 
 import (
-	. "gonzbee/yenc"
+	. "github.com/DanielMorsing/gonzbee/yenc"
 	"io/ioutil"
 	"os"
 	"reflect"
