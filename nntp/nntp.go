@@ -1,3 +1,6 @@
+//Copyright 2012, Daniel Morsing
+//For licensing information, See the LICENSE file
+
 //Package nntp provides some common operations on nntp server,
 //mostly for binary downloading
 package nntp

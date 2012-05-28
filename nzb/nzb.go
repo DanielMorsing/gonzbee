@@ -1,3 +1,6 @@
+//Copyright 2012, Daniel Morsing
+//For licensing information, See the LICENSE file
+
 //Package nzb provides a function for parsing NZB files.
 package nzb
 

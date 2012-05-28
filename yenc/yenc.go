@@ -1,3 +1,6 @@
+//Copyright 2012, Daniel Morsing
+//For licensing information, See the LICENSE file
+
 //Package yenc gives a decoding interface for yEnc encoded binaries.
 package yenc
 

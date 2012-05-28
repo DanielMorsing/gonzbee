@@ -1,3 +1,6 @@
+//Copyright 2012, Daniel Morsing
+//For licensing information, See the LICENSE file
+
 package nzb_test
 
 import (
