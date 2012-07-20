@@ -33,13 +33,13 @@ var invalid string = `<?xml version="1.0" encoding="iso-8859-1" ?>
 </file>
 </nzb>`
 
-var topnzb Nzb = Nzb{[]File{
+var topnzb Nzb = Nzb{[]*File{
 	{
 		Poster:   "Joe Example <Joe@Example.com>",
 		Date:     2000000000,
 		Subject:  "Here is your file \"example.rar\" yEnc (1/1)",
 		Groups:   []string{"alt.binaries.example"},
-		Segments: []Segment{{Bytes: 14043, Number: 1, MsgId: "4f08c1ce$0$32047$c3e8da3$853bf72e@news.astraweb.com"}},
+		Segments: []*Segment{{Bytes: 14043, Number: 1, MsgId: "4f08c1ce$0$32047$c3e8da3$853bf72e@news.astraweb.com"}},
 	}}}
 
 func checkResult(t *testing.T, expected interface{}, was interface{}, err error) {

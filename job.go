@@ -95,7 +95,7 @@ func (j *job) handle() {
 			ch := make(chan *nntp.Conn)
 			downloaderRq <- ch
 			conn := <-ch
-			go func(seg nzb.Segment, f nzb.File) {
+			go func(seg *nzb.Segment, f *nzb.File) {
 				defer fileClose.Done()
 				defer func() {
 					downloadReaper <- conn

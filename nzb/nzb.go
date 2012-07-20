@@ -35,14 +35,14 @@ type File struct {
 	//Which groups it was posted on
 	Groups []string `xml:"groups>group"`
 	//The Segments comprising this file
-	Segments []Segment `xml:"segments>segment"`
+	Segments []*Segment `xml:"segments>segment"`
 }
 
 //Nzb represents the top level for a NZB file
 //It's just a dumb struct to contain all the files.
 type Nzb struct {
 	//The files described in the NZB file
-	File []File `xml:"file"`
+	File []*File `xml:"file"`
 }
 
 //Parse parses an nzb document from the reader and returns
