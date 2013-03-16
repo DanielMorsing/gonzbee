@@ -4,17 +4,18 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/DanielMorsing/gonzbee/nntp"
 	"github.com/DanielMorsing/gonzbee/nzb"
 	"github.com/DanielMorsing/gonzbee/yenc"
 	"io"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"regexp"
-	"errors"
-	"net/textproto"
+	"sync"
 )
 
 var (
@@ -26,10 +27,18 @@ var extStrip = regexp.MustCompile(`\.nzb$`)
 
 var existErr = errors.New("file exists")
 
-func dialNNTP() (*nntp.Conn, error) {
+var nntpChan = make(chan *nntp.Conn, 10)
+
+func getNNTP() (*nntp.Conn, error) {
 	dialstr := fmt.Sprintf("%s:%d", config.Address, config.Port)
 	var err error
 	var c *nntp.Conn
+
+	c = <-nntpChan
+	if c != nil {
+		return c, nil
+	}
+
 	if config.TLS {
 		c, err = nntp.DialTLS(dialstr)
 	} else {
@@ -42,6 +51,16 @@ func dialNNTP() (*nntp.Conn, error) {
 	return c, nil
 }
 
+func putNNTP(c *nntp.Conn) {
+	nntpChan <- c
+}
+
+func init() {
+	for i := 0; i < 10; i++ {
+		nntpChan <- nil
+	}
+}
+
 func main() {
 	flag.Parse()
 	if flag.NArg() == 0 {
@@ -49,11 +68,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	c, err := dialNNTP()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		return
-	}
 	for _, path := range flag.Args() {
 		file, err := os.Open(path)
 		if err != nil {
@@ -67,8 +81,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, err.Error())
 			continue
 		}
-		
-		err = downloadNzb(c, nzb, extStrip.ReplaceAllString(path, ""))
+
+		err = downloadNzb(nzb, extStrip.ReplaceAllString(path, ""))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			continue
@@ -76,7 +90,7 @@ func main() {
 	}
 }
 
-func downloadNzb(conn *nntp.Conn, nzb *nzb.Nzb, dir string) error {
+func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 	if *saveDir != "" {
 		dir = *saveDir
 	}
@@ -84,26 +98,40 @@ func downloadNzb(conn *nntp.Conn, nzb *nzb.Nzb, dir string) error {
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
+	var wg sync.WaitGroup
+	for _, file := range nzbFile.File {
+		conn, err := getNNTP()
+		if err != nil {
+			return err
+		}
+		wg.Add(1)
+		go func(c *nntp.Conn, file *nzb.File) {
 
-	for _, file := range nzb.File {
-		var i int
-		// nntp server might not have a given group, try them all
-		for i = 0; i < len(file.Groups); i++ {
-			err = conn.SwitchGroup(file.Groups[i])
-			if err == nil {
-				break
+			defer putNNTP(c)
+			defer wg.Done()
+			var i int
+			var err error
+			// nntp server might not have a given group, try them all
+			for i = 0; i < len(file.Groups); i++ {
+				err = conn.SwitchGroup(file.Groups[i])
+				if err == nil {
+					break
+				}
 			}
-		}
-		if i == len(file.Groups) {
-			return err
-		}
-		err = downloadFile(conn, dir, file.Segments)
-		if err == existErr {
-			continue
-		} else if err != nil {
-			return err
-		}
+			if i == len(file.Groups) {
+				fmt.Println(os.Stderr, err)
+				return
+			}
+
+			err = downloadFile(c, dir, file.Segments)
+			if err == existErr {
+				return
+			} else if err != nil {
+				fmt.Println(os.Stderr, err)
+			}
+		}(conn, file)
 	}
+	wg.Wait()
 	return nil
 }
 
