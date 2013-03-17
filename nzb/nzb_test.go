@@ -66,3 +66,12 @@ func TestInvalidNzb(t *testing.T) {
 		t.Errorf("Parsed an invalid NZB. Got: %v", nzb)
 	}
 }
+
+func TestFilename(t *testing.T) {
+	reader := strings.NewReader(singleFile)
+	nzb, err := Parse(reader)
+	checkResult(t, &topnzb, nzb, err)
+	if nzb.File[0].Subject.Filename() != "example.rar" {
+		t.Errorf("Invalid filename, Expected: \"example.rar\" Got: %q", nzb)
+	}
+}

@@ -24,6 +24,20 @@ type Segment struct {
 	MsgId string `xml:",chardata"`
 }
 
+type Subject string
+
+func quot(r rune) bool {
+	return r == '"'
+}
+
+func (s Subject) Filename() string {
+	name := strings.FieldsFunc(string(s), quot)
+	if len(name) == 0 {
+		return ""
+	}
+	return name[1]
+}
+
 //File represents a single file in the NZB file.
 type File struct {
 	//The person who posted this to usenet
@@ -31,7 +45,7 @@ type File struct {
 	//The date of the post in unix time
 	Date int `xml:"date,attr"`
 	//A subject line. This normally contains the filename
-	Subject string `xml:"subject,attr"`
+	Subject Subject `xml:"subject,attr"`
 	//Which groups it was posted on
 	Groups []string `xml:"groups>group"`
 	//The Segments comprising this file

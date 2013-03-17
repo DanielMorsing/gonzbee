@@ -30,7 +30,7 @@ var existErr = errors.New("file exists")
 var nntpChan = make(chan *nntp.Conn, 10)
 
 func getNNTP() (*nntp.Conn, error) {
-	dialstr := fmt.Sprintf("%s:%d", config.Address, config.Port)
+	dialstr := config.GetAddressStr()
 	var err error
 	var c *nntp.Conn
 
@@ -123,7 +123,7 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 				return
 			}
 
-			err = downloadFile(c, dir, file.Segments)
+			err = downloadFile(c, dir, file)
 			if err == existErr {
 				return
 			} else if err != nil {
@@ -135,23 +135,25 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 	return nil
 }
 
-func downloadFile(conn *nntp.Conn, dir string, segs []*nzb.Segment) error {
-	var i int
+func downloadFile(conn *nntp.Conn, dir string, nzbfile *nzb.File) error {
 	var file *os.File
 	var fname string
 	var err error
-	for i = 0; i < len(segs); i++ {
-		file, fname, err = getFirst(conn, segs[i].MsgId, dir)
-		if err == nil {
-			break
-		}
+
+	fname = nzbfile.Subject.Filename()
+	if fname == "" {
+		return errors.New("bad subject")
 	}
-	if i == len(segs) {
-		fmt.Fprintln(os.Stderr, "No segments available for file")
-		return nil
+	fname = filepath.Join(dir, fname)
+	tmpname := fname + ".gonztemp"
+
+	file, err = os.Create(tmpname)
+	if err != nil {
+		return err
 	}
 	defer file.Close()
-	for _, seg := range segs[i:] {
+
+	for _, seg := range nzbfile.Segments {
 		err = getYenc(conn, file, seg.MsgId)
 		if err != nil {
 			return err
@@ -163,6 +165,7 @@ func downloadFile(conn *nntp.Conn, dir string, segs []*nzb.Segment) error {
 func getYenc(c *nntp.Conn, f *os.File, msgid string) error {
 	s, err := c.GetMessageReader(msgid)
 	if e, ok := err.(*textproto.Error); ok && e.Code == 430 {
+		fmt.Fprintf(os.Stderr, "Missing segment %q\n", msgid)
 		return nil
 	} else if err != nil {
 		return err
@@ -173,34 +176,6 @@ func getYenc(c *nntp.Conn, f *os.File, msgid string) error {
 		return err
 	}
 	return writeYenc(f, y)
-}
-
-func getFirst(c *nntp.Conn, msgid string, dir string) (f *os.File, fname string, err error) {
-	// download the first segment. no way to know the filename until then
-	s, err := c.GetMessageReader(msgid)
-	if err != nil {
-		return nil, "", err
-	}
-	defer s.Close()
-	y, err := yenc.NewPart(s)
-	if err != nil {
-		return nil, "", err
-	}
-	fname = filepath.Join(dir, y.Filename)
-	_, err = os.Stat(fname)
-	if err == nil {
-		return nil, "", existErr
-	}
-	tmpname := fname + ".gonztemp"
-	file, err := os.Create(tmpname)
-	if err != nil {
-		return nil, "", err
-	}
-	err = writeYenc(file, y)
-	if err != nil {
-		return nil, "", err
-	}
-	return file, fname, nil
 }
 
 func writeYenc(f *os.File, y *yenc.Part) error {
