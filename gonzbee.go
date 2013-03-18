@@ -4,18 +4,16 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/DanielMorsing/gonzbee/nntp"
 	"github.com/DanielMorsing/gonzbee/nzb"
 	"github.com/DanielMorsing/gonzbee/yenc"
 	"io"
-	"net/textproto"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sync"
 )
 
 var (
@@ -26,40 +24,6 @@ var (
 var extStrip = regexp.MustCompile(`\.nzb$`)
 
 var existErr = errors.New("file exists")
-
-var nntpChan = make(chan *nntp.Conn, 10)
-
-func getNNTP() (*nntp.Conn, error) {
-	dialstr := config.GetAddressStr()
-	var err error
-	var c *nntp.Conn
-
-	c = <-nntpChan
-	if c != nil {
-		return c, nil
-	}
-
-	if config.TLS {
-		c, err = nntp.DialTLS(dialstr)
-	} else {
-		c, err = nntp.Dial(dialstr)
-	}
-	if err != nil {
-		return nil, err
-	}
-	err = c.Authenticate(config.Username, config.Password)
-	return c, nil
-}
-
-func putNNTP(c *nntp.Conn) {
-	nntpChan <- c
-}
-
-func init() {
-	for i := 0; i < 10; i++ {
-		nntpChan <- nil
-	}
-}
 
 func main() {
 	flag.Parse()
@@ -98,44 +62,18 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
-	var wg sync.WaitGroup
 	for _, file := range nzbFile.File {
-		conn, err := getNNTP()
-		if err != nil {
-			return err
+		err = downloadFile(dir, file)
+		if err == existErr {
+			continue
+		} else if err != nil {
+			fmt.Println(os.Stderr, err)
 		}
-		wg.Add(1)
-		go func(c *nntp.Conn, file *nzb.File) {
-
-			defer putNNTP(c)
-			defer wg.Done()
-			var i int
-			var err error
-			// nntp server might not have a given group, try them all
-			for i = 0; i < len(file.Groups); i++ {
-				err = conn.SwitchGroup(file.Groups[i])
-				if err == nil {
-					break
-				}
-			}
-			if i == len(file.Groups) {
-				fmt.Println(os.Stderr, err)
-				return
-			}
-
-			err = downloadFile(c, dir, file)
-			if err == existErr {
-				return
-			} else if err != nil {
-				fmt.Println(os.Stderr, err)
-			}
-		}(conn, file)
 	}
-	wg.Wait()
 	return nil
 }
 
-func downloadFile(conn *nntp.Conn, dir string, nzbfile *nzb.File) error {
+func downloadFile(dir string, nzbfile *nzb.File) error {
 	var file *os.File
 	var fname string
 	var err error
@@ -145,6 +83,9 @@ func downloadFile(conn *nntp.Conn, dir string, nzbfile *nzb.File) error {
 		return errors.New("bad subject")
 	}
 	fname = filepath.Join(dir, fname)
+	if _, err := os.Stat(fname); err == nil {
+		return existErr
+	}
 	tmpname := fname + ".gonztemp"
 
 	file, err = os.Create(tmpname)
@@ -152,38 +93,51 @@ func downloadFile(conn *nntp.Conn, dir string, nzbfile *nzb.File) error {
 		return err
 	}
 	defer file.Close()
+	i, j := 0, 0
+	retCh := make(chan *getResult)
+	ch := getCh
+	for i < len(nzbfile.Segments) {
+		var rq *getRequest
+		if j < len(nzbfile.Segments) {
+			rq = &getRequest{
+				retCh,
+				nzbfile.Segments[j].MsgId,
+				nzbfile.Groups,
+			}
+		} else {
+			ch = nil
+		}
 
-	for _, seg := range nzbfile.Segments {
-		err = getYenc(conn, file, seg.MsgId)
-		if err != nil {
-			return err
+		select {
+		case ch <- rq:
+			j++
+		case ret := <-retCh:
+			i++
+			if ret.err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
+			err := writeYenc(file, ret.ret)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
 		}
 	}
+
 	return os.Rename(file.Name(), fname)
 }
 
-func getYenc(c *nntp.Conn, f *os.File, msgid string) error {
-	s, err := c.GetMessageReader(msgid)
-	if e, ok := err.(*textproto.Error); ok && e.Code == 430 {
-		fmt.Fprintf(os.Stderr, "Missing segment %q\n", msgid)
-		return nil
-	} else if err != nil {
-		return err
-	}
-	defer s.Close()
-	y, err := yenc.NewPart(s)
-	if err != nil {
-		return err
-	}
-	return writeYenc(f, y)
-}
-
-func writeYenc(f *os.File, y *yenc.Part) error {
-	_, err := f.Seek(y.Begin, 0)
+func writeYenc(f *os.File, b []byte) error {
+	rd := bytes.NewReader(b)
+	y, err := yenc.NewPart(rd)
 	if err != nil {
 		return err
 	}
 
+	_, err = f.Seek(y.Begin, 0)
+	if err != nil {
+		return err
+	}
 	_, err = io.Copy(f, y)
 	return err
 }
