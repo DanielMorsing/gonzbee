@@ -93,34 +93,25 @@ func downloadFile(dir string, nzbfile *nzb.File) error {
 		return err
 	}
 	defer file.Close()
-	i, j := 0, 0
 	retCh := make(chan *getResult)
-	ch := getCh
-	for i < len(nzbfile.Segments) {
-		var rq *getRequest
-		if j < len(nzbfile.Segments) {
-			rq = &getRequest{
+	go func() {
+		for i := range nzbfile.Segments {
+			getCh <- &getRequest{
 				retCh,
-				nzbfile.Segments[j].MsgId,
+				nzbfile.Segments[i].MsgId,
 				nzbfile.Groups,
 			}
-		} else {
-			ch = nil
 		}
-
-		select {
-		case ch <- rq:
-			j++
-		case ret := <-retCh:
-			i++
-			if ret.err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				continue
-			}
-			err := writeYenc(file, ret.ret)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-			}
+	}()
+	for i := 0; i < len(nzbfile.Segments); i++ {
+		ret := <-retCh
+		if ret.err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			continue
+		}
+		err := writeYenc(file, ret.ret)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 		}
 	}
 

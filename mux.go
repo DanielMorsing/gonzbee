@@ -4,7 +4,9 @@
 package main
 
 import (
+	"fmt"
 	"github.com/DanielMorsing/gonzbee/nntp"
+	"os"
 )
 
 var getCh = make(chan *getRequest)
@@ -25,21 +27,24 @@ func init() {
 }
 
 func server() {
+	var i int
 	var bufCh = make(chan *nntp.Conn, 10)
-	for i := 0; i < cap(bufCh); i++ {
-		bufCh <- nil
-	}
-
 	for {
-		var err error
 		rq := <-getCh
+
+		if i < 10 {
+			i++
+			go func() {
+				c, err := dialNNTP()
+				if err != nil {
+					fmt.Println(os.Stderr, err)
+				}
+				bufCh <- c
+			}()
+		}
 		c := <-bufCh
 		if c == nil {
-			c, err = dialNNTP()
-			if err != nil {
-				rq.ret <- &getResult{nil, err}
-				continue
-			}
+			continue
 		}
 		go func(c *nntp.Conn, rq *getRequest) {
 			var err error
