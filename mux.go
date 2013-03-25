@@ -37,7 +37,7 @@ func server() {
 			go func() {
 				c, err := dialNNTP()
 				if err != nil {
-					fmt.Println(os.Stderr, err)
+					fmt.Fprintln(os.Stderr, err)
 				}
 				bufCh <- c
 			}()

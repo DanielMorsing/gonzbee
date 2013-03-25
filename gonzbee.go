@@ -35,20 +35,20 @@ func main() {
 	for _, path := range flag.Args() {
 		file, err := os.Open(path)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
+			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
 
 		nzb, err := nzb.Parse(file)
 		file.Close()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
+			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
 
 		err = downloadNzb(nzb, extStrip.ReplaceAllString(path, ""))
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
+			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
 	}
@@ -67,7 +67,7 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 		if err == existErr {
 			continue
 		} else if err != nil {
-			fmt.Println(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, err)
 		}
 	}
 	return nil
@@ -106,7 +106,7 @@ func downloadFile(dir string, nzbfile *nzb.File) error {
 	for i := 0; i < len(nzbfile.Segments); i++ {
 		ret := <-retCh
 		if ret.err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, ret.err)
 			continue
 		}
 		err := writeYenc(file, ret.ret)
