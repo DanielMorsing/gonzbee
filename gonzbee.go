@@ -51,6 +51,13 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
+
+		if *rm {
+			err = os.Remove(path)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		}
 	}
 }
 
