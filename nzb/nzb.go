@@ -7,6 +7,7 @@ package nzb
 import (
 	"bufio"
 	"encoding/xml"
+	"regexp"
 	"errors"
 	"fmt"
 	"io"
@@ -30,12 +31,14 @@ func quot(r rune) bool {
 	return r == '"'
 }
 
+var subjectregex = regexp.MustCompile(`"([^"]*)"`)
+
 func (s Subject) Filename() string {
-	name := strings.FieldsFunc(string(s), quot)
-	if len(name) == 0 {
+	n := subjectregex.FindStringSubmatch(string(s))
+	if n == nil {
 		return ""
 	}
-	return name[1]
+	return n[1]
 }
 
 //File represents a single file in the NZB file.
