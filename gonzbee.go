@@ -103,10 +103,14 @@ func decodeMsg(rc io.ReadCloser, f *file) {
 	var b bytes.Buffer
 	yread, err := yenc.NewPart(rc)
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		f.rq <- nil
 	}
 	b.Grow(int(yread.Size))
-	io.Copy(&b, yread)
+	_, err = io.Copy(&b, yread)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
 	rc.Close()
 	f.rq <- &yencResult{b.Bytes(), yread.Begin}
 }
