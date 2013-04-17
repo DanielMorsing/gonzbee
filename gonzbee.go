@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 )
 
 var (
@@ -59,6 +60,7 @@ func main() {
 			}
 		}
 	}
+	filewg.Wait()
 }
 
 func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
@@ -81,61 +83,90 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 }
 
 func downloadFile(dir string, nzbfile *nzb.File) error {
-	var file *os.File
-	var fname string
-	var err error
-
-	fname = nzbfile.Subject.Filename()
-	if fname == "" {
-		return errors.New("bad subject")
-	}
-	fname = filepath.Join(dir, fname)
-	if _, err := os.Stat(fname); err == nil {
-		return existErr
-	}
-	tmpname := fname + ".gonztemp"
-
-	file, err = os.Create(tmpname)
+	file, err := newFile(dir, nzbfile)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	retCh := make(chan *getResult)
-	go func() {
-		for i := range nzbfile.Segments {
-			getCh <- &getRequest{
-				retCh,
-				nzbfile.Segments[i].MsgId,
-				nzbfile.Groups,
-			}
-		}
-	}()
-	for i := 0; i < len(nzbfile.Segments); i++ {
-		ret := <-retCh
-		if ret.err != nil {
-			fmt.Fprintln(os.Stderr, ret.err)
+	for _, f := range nzbfile.Segments {
+		rc, err := getMessage(nzbfile.Groups, f.MsgId)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error getting", f.MsgId, ":", err)
+			file.rq <- nil
 			continue
 		}
-		err := writeYenc(file, ret.ret)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
+		go decodeMsg(rc, file)
 	}
-
-	return os.Rename(file.Name(), fname)
+	return nil
 }
 
-func writeYenc(f *os.File, b []byte) error {
-	rd := bytes.NewReader(b)
-	y, err := yenc.NewPart(rd)
+func decodeMsg(rc io.ReadCloser, f *file) {
+	var b bytes.Buffer
+	yread, err := yenc.NewPart(rc)
 	if err != nil {
-		return err
+		f.rq <- nil
+	}
+	b.Grow(int(yread.Size))
+	io.Copy(&b, yread)
+	rc.Close()
+	f.rq <- &yencResult{b.Bytes(), yread.Begin}
+}
+
+func newFile(dirname string, nzbfile *nzb.File) (*file, error) {
+	filename := nzbfile.Subject.Filename()
+	if filename == "" {
+		return nil, errors.New("bad subject")
 	}
 
-	_, err = f.Seek(y.Begin, 0)
-	if err != nil {
-		return err
+	path := filepath.Join(dirname, filename)
+	if _, err := os.Stat(path); err == nil {
+		return nil, existErr
 	}
-	_, err = io.Copy(f, y)
-	return err
+
+	temppath := path + ".gonztemp"
+	f, err := os.Create(temppath)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &file{
+		name:      filename,
+		path:      path,
+		partsLeft: len(nzbfile.Segments),
+		file:      f,
+		rq:        make(chan *yencResult, len(nzbfile.Segments)),
+	}
+	filewg.Add(1)
+	go ret.serve()
+
+	return ret, nil
+}
+
+var filewg sync.WaitGroup
+
+func (f *file) serve() {
+	for ; f.partsLeft > 0; f.partsLeft-- {
+		y := <-f.rq
+		if y == nil {
+			continue
+		}
+		f.file.Seek(y.offset, os.SEEK_SET)
+		f.file.Write(y.b)
+	}
+	fmt.Printf("Done downloading file %q\n", f.name)
+	os.Rename(f.file.Name(), f.path)
+	f.file.Close()
+	filewg.Done()
+}
+
+type file struct {
+	name      string
+	path      string
+	file      *os.File
+	partsLeft int
+	rq        chan *yencResult
+}
+
+type yencResult struct {
+	b      []byte
+	offset int64
 }

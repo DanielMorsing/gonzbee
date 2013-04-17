@@ -4,65 +4,68 @@
 package main
 
 import (
-	"fmt"
 	"github.com/DanielMorsing/gonzbee/nntp"
-	"os"
+	"io"
+	"sync"
 )
 
-var getCh = make(chan *getRequest)
+func getMessage(group []string, msgId string) (io.ReadCloser, error) {
+	c := getConn()
+	var err error
+	for _, g := range group {
+		err = c.SwitchGroup(g)
+		if err == nil {
+			goto found
+		}
+	}
+	return nil, err
 
-type getRequest struct {
-	ret    chan *getResult
-	msgid  string
-	groups []string
+found:
+	r, err := c.GetMessageReader(msgId)
+	if err != nil {
+		return nil, err
+	}
+
+	reader := msgReader{r, c, nil}
+	return &reader, nil
 }
 
-type getResult struct {
-	ret []byte
+type msgReader struct {
+	io.ReadCloser
+	*nntp.Conn
 	err error
 }
 
-func init() {
-	go server()
+func (m *msgReader) Close() error {
+	err := m.ReadCloser.Close()
+	putConn(m.Conn)
+	return err
 }
 
-func server() {
-	var i int
-	var bufCh = make(chan *nntp.Conn, 10)
-	for {
-		rq := <-getCh
+var (
+	connMu  sync.Mutex
+	connNum int
+	connCh  = make(chan *nntp.Conn, 10)
+)
 
-		if i < 10 {
-			i++
-			go func() {
-				c, err := dialNNTP()
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-				}
-				bufCh <- c
-			}()
-		}
-		c := <-bufCh
-		if c == nil {
-			continue
-		}
-		go func(c *nntp.Conn, rq *getRequest) {
-			var err error
-			for _, s := range rq.groups {
-				err = c.SwitchGroup(s)
-				if err == nil {
-					goto Found
-				}
-			}
-			rq.ret <- &getResult{nil, err}
-			return
+func getConn() *nntp.Conn {
+	connMu.Lock()
 
-		Found:
-			b, err := c.GetMessage(rq.msgid)
-			rq.ret <- &getResult{b, err}
-			bufCh <- c
-		}(c, rq)
+	if connNum < 10 {
+		connNum++
+		go func() {
+			c, _ := dialNNTP()
+			connCh <- c
+		}()
 	}
+	connMu.Unlock()
+
+	c := <-connCh
+	return c
+}
+
+func putConn(c *nntp.Conn) {
+	connCh <- c
 }
 
 func dialNNTP() (*nntp.Conn, error) {
