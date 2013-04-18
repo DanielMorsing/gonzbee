@@ -15,6 +15,7 @@ import (
 //Conn represents a NNTP connection
 type Conn struct {
 	*textproto.Conn
+	group string
 }
 
 //Dial will establish a connection to a NNTP server.
@@ -85,6 +86,9 @@ func (n *Conn) Authenticate(user, pass string) error {
 //SwitchGroup will change the current group, using the supplied
 //group name. It returns an error, if any
 func (n *Conn) SwitchGroup(group string) error {
+	if group == n.group {
+		return nil
+	}
 	id, err := n.Cmd("GROUP %s", group)
 	if err != nil {
 		return err
@@ -92,6 +96,9 @@ func (n *Conn) SwitchGroup(group string) error {
 	n.StartResponse(id)
 	_, _, err = n.ReadCodeLine(211)
 	n.EndResponse(id)
+	if err == nil {
+		n.group = group
+	}
 	return err
 }
 

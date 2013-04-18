@@ -4,12 +4,12 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/DanielMorsing/gonzbee/nzb"
 	"github.com/DanielMorsing/gonzbee/yenc"
+	"github.com/DanielMorsing/gonzbee/nntp"
 	"io"
 	"os"
 	"path/filepath"
@@ -88,31 +88,58 @@ func downloadFile(dir string, nzbfile *nzb.File) error {
 		return err
 	}
 	for _, f := range nzbfile.Segments {
-		rc, err := getMessage(nzbfile.Groups, f.MsgId)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error getting", f.MsgId, ":", err)
-			file.rq <- nil
-			continue
-		}
-		go decodeMsg(rc, file)
+		c := getConn()
+		go decodeMsg(c, file, nzbfile.Groups, f.MsgId)
 	}
 	return nil
 }
 
-func decodeMsg(rc io.ReadCloser, f *file) {
-	var b bytes.Buffer
+func decodeMsg(c *nntp.Conn, f *file, groups []string, MsgId string) {
+	var err error
+	defer func() { putConnErr(c, err)}()
+	defer f.Done()
+	err = findGroup(c, groups)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "nntp error:", err)
+		return
+	}
+	rc, err := c.GetMessageReader(MsgId)
+	defer rc.Close()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "nntp error:", err)
+		return
+	}
 	yread, err := yenc.NewPart(rc)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		f.rq <- nil
+		return
 	}
-	b.Grow(int(yread.Size))
-	_, err = io.Copy(&b, yread)
+	wr := f.WriterAt(yread.Begin)
+	_, err = io.Copy(wr, yread)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
-	rc.Close()
-	f.rq <- &yencResult{b.Bytes(), yread.Begin}
+}
+
+func findGroup(c *nntp.Conn, groups []string) error {
+	var err error
+	for _, g := range groups {
+		err = c.SwitchGroup(g)
+		if err == nil {
+			return nil
+		}
+	}	
+	return err
+}
+
+var filewg sync.WaitGroup
+
+type file struct {
+	name      string
+	path      string
+	file      *os.File
+	partsLeft int
+	mu sync.Mutex
 }
 
 func newFile(dirname string, nzbfile *nzb.File) (*file, error) {
@@ -137,40 +164,39 @@ func newFile(dirname string, nzbfile *nzb.File) (*file, error) {
 		path:      path,
 		partsLeft: len(nzbfile.Segments),
 		file:      f,
-		rq:        make(chan *yencResult, len(nzbfile.Segments)),
 	}
 	filewg.Add(1)
-	go ret.serve()
-
 	return ret, nil
 }
 
-var filewg sync.WaitGroup
+func (f *file) WriterAt(offset int64) io.Writer {
+	return &fileWriter{
+		f: f.file,
+		offset: offset,
+	}
+}
 
-func (f *file) serve() {
-	for ; f.partsLeft > 0; f.partsLeft-- {
-		y := <-f.rq
-		if y == nil {
-			continue
-		}
-		f.file.Seek(y.offset, os.SEEK_SET)
-		f.file.Write(y.b)
+func (f *file) Done() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.partsLeft--
+	if f.partsLeft != 0 {
+		return
 	}
 	fmt.Printf("Done downloading file %q\n", f.name)
 	os.Rename(f.file.Name(), f.path)
 	f.file.Close()
 	filewg.Done()
+
 }
 
-type file struct {
-	name      string
-	path      string
-	file      *os.File
-	partsLeft int
-	rq        chan *yencResult
-}
-
-type yencResult struct {
-	b      []byte
+type fileWriter struct {
+	f *os.File
 	offset int64
+}
+
+func (f *fileWriter) Write(b []byte) (int, error) {
+	n, err := f.f.WriteAt(b, f.offset)
+	f.offset += int64(n)
+	return n, err
 }
