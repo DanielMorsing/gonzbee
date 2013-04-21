@@ -12,14 +12,13 @@ import (
 	"sync"
 )
 
-
 var (
 	connMu  sync.Mutex
 	connNum int
 	connCh  = make(chan *nntp.Conn, 10)
 )
 
-func getConn() (*nntp.Conn) {
+func getConn() *nntp.Conn {
 	connMu.Lock()
 
 	if connNum < 10 {
