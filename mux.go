@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/textproto"
 	"os"
+	"io"
 	"sync"
 )
 
@@ -51,7 +52,7 @@ func putConn(c *nntp.Conn) {
 // Invalidate the connection if it's a permanent network error
 func putConnErr(c *nntp.Conn, err error) {
 	e, ok := err.(net.Error)
-	if ok && !e.Temporary() {
+	if (ok && !e.Temporary()) || err == io.EOF {
 		putBroken(c)
 	} else {
 		putConn(c)

@@ -214,11 +214,11 @@ func decodeMsg(c *nntp.Conn, f *file, groups []string, MsgId string) {
 		return
 	}
 	rc, err := c.GetMessageReader(MsgId)
-	defer rc.Close()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "nntp error:", err)
 		return
 	}
+	defer rc.Close()
 	yread, err := yenc.NewPart(rc)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
