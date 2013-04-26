@@ -7,12 +7,10 @@ package yenc
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
-	"strings"
 )
 
 //Part holds the information contained in a parsed yEnc header.
@@ -30,6 +28,12 @@ type Part struct {
 	br        *bufio.Reader
 	crc       hash.Hash32
 	byteCount int
+}
+
+type DecodeError string
+
+func(d DecodeError) Error() string {
+	return string(d)
 }
 
 //NewPart finds and parses the yEnc header in the reader and returns a
@@ -57,7 +61,9 @@ func (y *Part) Read(b []byte) (n int, err error) {
 		var tok byte
 		tok, err = y.br.ReadByte()
 		if err != nil {
-			err = errors.New("Unexpected End-of-File")
+			if err == io.EOF {
+				err = DecodeError("Unexpected End-of-File")
+			}
 			return
 		}
 		if tok == '\n' {
@@ -66,7 +72,9 @@ func (y *Part) Read(b []byte) (n int, err error) {
 		if tok == '=' {
 			tok, err = y.br.ReadByte()
 			if err != nil {
-				err = errors.New("Unexpected End-of-File")
+				if err == io.EOF {
+					err = DecodeError("Unexpected End-of-File")
+				}
 				return
 			}
 			if tok == 'y' {
@@ -89,11 +97,11 @@ func (y *Part) Read(b []byte) (n int, err error) {
 func (y *Part) epilogue() error {
 	footer, err := y.parseFooter()
 	if err != nil {
-		return fmt.Errorf("Could not verify decoding: %s", err.Error())
+		return err
 	}
 
 	if footer.size != y.byteCount {
-		return errors.New("Could not verify decoding: Sizes differ")
+		return DecodeError("Could not verify decoding: Sizes differ")
 	}
 	var crcp *uint32
 	if y.multipart || footer.crc == 0 {
@@ -103,7 +111,7 @@ func (y *Part) epilogue() error {
 	}
 
 	if *crcp != y.crc.Sum32() {
-		return errors.New("Could not verify decoding: Bad CRC")
+		return DecodeError("Could not verify decoding: Bad CRC")
 	}
 	return io.EOF
 }
@@ -124,7 +132,7 @@ func (y *Part) findHeader() error {
 		}
 		c, err := y.br.ReadByte()
 		if err != nil {
-			return errors.New("Could not find header")
+			return DecodeError("Could not find header")
 		}
 		switch state {
 		case StatePotential:
@@ -163,16 +171,19 @@ func (y *Part) parseHeader() error {
 func (y *Part) parseDataline() error {
 	dline, err := y.br.ReadString('\n')
 	if err != nil {
-		return errors.New("Malformed Header")
+		if err == io.EOF {
+			err = DecodeError("Unexpected End-of-File")
+		}
+		return err
 	}
 
-	dline = strings.TrimRight(dline, "\n")
+	dline = dline[:len(dline)-1]
 	dbuf := bytes.NewBufferString(dline)
 
 	for {
 		name, err := consumeName(dbuf)
 		if err != nil {
-			return errors.New("Malformed Header")
+			return DecodeError("Malformed header")
 		}
 
 		if name == "name" {
@@ -180,12 +191,12 @@ func (y *Part) parseDataline() error {
 		}
 		value, err := consumeValue(dbuf)
 		if err != nil {
-			return errors.New("Malformed Header")
+			return DecodeError("Malformed header")
 		}
 
 		err = y.handleAttrib(name, value)
 		if err != nil {
-			return errors.New("Malformed yEnc Attribute")
+			return DecodeError("Malformed header")
 		}
 	}
 	y.Filename = dbuf.String()
@@ -196,38 +207,47 @@ func (y *Part) parsePartline() error {
 	//move past =ypart
 	_, err := y.br.ReadString(' ')
 	if err != nil {
-		return errors.New("Malformed Header")
+		if err == io.EOF {
+			err = DecodeError("Unexpected End-of-File")
+		}
+		return err
 	}
 
 	pline, err := y.br.ReadString('\n')
 	if err != nil {
-		return errors.New("Malformed Header")
+		if err == io.EOF {
+			err = DecodeError("Unexpected End-of-File")
+		}
+		return err
 	}
 
-	pline = strings.TrimRight(pline, "\n")
+	pline = pline[:len(pline)-1]
 	pbuf := bytes.NewBufferString(pline)
 	var name, value string
 	for {
 		name, err = consumeName(pbuf)
 		if err != nil {
-			return errors.New("Malformed Header")
+			return DecodeError("Malformed header")
 		}
 
 		value, err = consumeValue(pbuf)
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return errors.New("Malformed Header")
+			return DecodeError("Malformed header")
 		}
 
 		err = y.handleAttrib(name, value)
 		if err != nil {
-			return errors.New("Malformed Header")
+			return DecodeError("Malformed header")
 		}
 	}
 	//handle the last value through the loop
 	err = y.handleAttrib(name, value)
-	return err
+	if err != nil {
+		return DecodeError("Malformed header")
+	}
+	return nil
 }
 
 func (y *Part) handleAttrib(name, value string) error {
@@ -264,44 +284,54 @@ type footer struct {
 //we can sorta handle a corrupted footer
 //so instead of dumping out, return the error
 func (y *Part) parseFooter() (*footer, error) {
-	corrupt := errors.New("Corrupted footer")
 	f := new(footer)
 	//move past =yend
 	_, err := y.br.ReadString(' ')
 	if err != nil {
-		return f, corrupt
+		if err == io.EOF {
+			err = DecodeError("Unexpected End-of-File")
+		}
+		return nil, err
 	}
 
 	fline, err := y.br.ReadString('\n')
 	if err != nil {
-		return f, corrupt
+		if err == io.EOF {
+			err = DecodeError("Unexpected End-of-File")
+		}
+		return nil, err
 	}
 
-	fline = strings.TrimRight(fline, " \n")
+	fline = fline[:len(fline)-1]
 	fbuf := bytes.NewBufferString(fline)
 	var name, value string
 	for {
 		name, err = consumeName(fbuf)
 		if err != nil {
+			// if someone added whitespace to the end of this line, this will fail with an EOF
+			// surface this to the callers
+			if err == io.EOF {
+				err = nil
+			}
 			return f, err
 		}
 		value, err = consumeValue(fbuf)
-		if err != nil && err == io.EOF {
+		if err == io.EOF {
 			break
 		} else if err != nil {
-			return f, corrupt
+			return f, DecodeError("Corrupt footer")
 		}
 
 		err = f.handleAttrib(name, value)
 		if err != nil {
-			return f, corrupt
+			return f, DecodeError("Corrupt footer")
 		}
 
 	}
 	//handle the last value through the loop
 	err = f.handleAttrib(name, value)
 	if err != nil {
-		return f, corrupt
+		return f, DecodeError("Corrupt Footer")
 	}
 	return f, nil
 }
@@ -326,7 +356,7 @@ func consumeName(b *bytes.Buffer) (string, error) {
 	if err != nil {
 		return name, err
 	}
-	name = strings.TrimRight(name, "=")
+	name = name[:len(name)-1]
 	return name, nil
 }
 
@@ -335,6 +365,6 @@ func consumeValue(b *bytes.Buffer) (string, error) {
 	if err != nil {
 		return value, err
 	}
-	value = strings.TrimRight(value, " ")
+	value = value[:len(value)-1]
 	return value, nil
 }

@@ -6,10 +6,10 @@ package main
 import (
 	"fmt"
 	"github.com/DanielMorsing/gonzbee/nntp"
+	"github.com/DanielMorsing/gonzbee/yenc"
 	"net"
 	"net/textproto"
 	"os"
-	"io"
 	"sync"
 )
 
@@ -51,11 +51,11 @@ func putConn(c *nntp.Conn) {
 
 // Invalidate the connection if it's a permanent network error
 func putConnErr(c *nntp.Conn, err error) {
-	e, ok := err.(net.Error)
-	if (ok && !e.Temporary()) || err == io.EOF {
-		putBroken(c)
-	} else {
+	switch err.(type) {
+	case yenc.DecodeError, *textproto.Error:
 		putConn(c)
+	default:
+		putBroken(c)
 	}
 }
 
