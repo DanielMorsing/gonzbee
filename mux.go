@@ -55,7 +55,11 @@ func putConnErr(c *nntp.Conn, err error) {
 	case yenc.DecodeError, *textproto.Error:
 		putConn(c)
 	default:
-		putBroken(c)
+		if err != nil {
+			putBroken(c)
+		} else {
+			putConn(c)
+		}
 	}
 }
 
