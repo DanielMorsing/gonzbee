@@ -94,6 +94,7 @@ func (y *Part) Read(b []byte) (n int, err error) {
 	return
 }
 
+// handle footer and give an error if it fails crc.
 func (y *Part) epilogue() error {
 	footer, err := y.parseFooter()
 	if err != nil {
@@ -122,7 +123,7 @@ func (y *Part) findHeader() error {
 		StateNormal
 	)
 	i := 0
-	str := []byte("=ybegin ")
+	str := "=ybegin "
 	//regexp package will read past the end of the match, so making my own little matching statemachine
 	state := StatePotential
 	for {
@@ -281,11 +282,14 @@ type footer struct {
 	pcrc uint32
 }
 
-//we can sorta handle a corrupted footer
-//so instead of dumping out, return the error
+// Parse the footer of a yenc part
+// we can sorta handle a corrupted footer
+// so instead of dumping out, return the error
 func (y *Part) parseFooter() (*footer, error) {
 	f := new(footer)
-	//move past =yend
+	// move past =yend
+	// really, we've only checked for "=y"
+	// but in practice this works.
 	_, err := y.br.ReadString(' ')
 	if err != nil {
 		if err == io.EOF {
@@ -294,15 +298,16 @@ func (y *Part) parseFooter() (*footer, error) {
 		return nil, err
 	}
 
+	// carve out a line to read from
 	fline, err := y.br.ReadString('\n')
 	if err != nil {
-		if err == io.EOF {
-			err = DecodeError("Unexpected End-of-File")
+		// EOF is fine. just means that someone didn't end this line with \n
+		// all other errors are not fine
+		if err != io.EOF {
+			return nil, err
 		}
-		return nil, err
 	}
 
-	fline = fline[:len(fline)-1]
 	fbuf := bytes.NewBufferString(fline)
 	var name, value string
 	for {
@@ -316,10 +321,10 @@ func (y *Part) parseFooter() (*footer, error) {
 			return f, err
 		}
 		value, err = consumeValue(fbuf)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return f, DecodeError("Corrupt footer")
+		if err != nil {
+			if err != io.EOF {
+				return f, DecodeError("Corrupt footer")
+			}
 		}
 
 		err = f.handleAttrib(name, value)
@@ -328,12 +333,6 @@ func (y *Part) parseFooter() (*footer, error) {
 		}
 
 	}
-	//handle the last value through the loop
-	err = f.handleAttrib(name, value)
-	if err != nil {
-		return f, DecodeError("Corrupt Footer")
-	}
-	return f, nil
 }
 
 func (f *footer) handleAttrib(name, value string) error {

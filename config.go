@@ -39,6 +39,7 @@ func (s *ServerConfig) GetAddressStr() string {
 	return fmt.Sprintf("%v:%d", s.Address, port)
 }
 
+// newConfig initialized config from a dotfile at $HOME/.gonzbee/config
 func newConfig() *ServerConfig {
 	//this is very unix specific, beware eventual porters
 	homeDir := os.Getenv("HOME")

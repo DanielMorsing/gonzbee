@@ -1,6 +1,9 @@
 //Copyright 2013, Daniel Morsing
 //For licensing information, See the LICENSE file
 
+// This file contains a muxer that will limit the amount of connections
+// that are concurrently running.
+
 package main
 
 import (
@@ -30,7 +33,8 @@ func getConn() *nntp.Conn {
 				if e, ok := err.(net.Error); ok {
 					fmt.Fprintln(os.Stderr, "Could not connect to server:", e)
 				} else if e, ok := err.(*textproto.Error); ok {
-					// nothing of what we've done so far should
+					// nothing of what we've done so far should error
+					// so it's probably bad creds. error out
 					fmt.Fprintln(os.Stderr, "nntp error:", e)
 				} else {
 					fmt.Fprintln(os.Stderr, e)
@@ -52,6 +56,7 @@ func putConn(c *nntp.Conn) {
 // Invalidate the connection if it's a permanent network error
 func putConnErr(c *nntp.Conn, err error) {
 	switch err.(type) {
+	// these errors are normal errors that don't invalidate the connection.
 	case yenc.DecodeError, *textproto.Error:
 		putConn(c)
 	default:

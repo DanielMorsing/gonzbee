@@ -27,10 +27,6 @@ type Segment struct {
 
 type Subject string
 
-func quot(r rune) bool {
-	return r == '"'
-}
-
 var subjectregex = regexp.MustCompile(`"([^"]*)"`)
 
 func (s Subject) Filename() string {
