@@ -206,7 +206,7 @@ func (f *file) Done() {
 
 }
 
-// filewriter allows for multiple goroutines to write concurrently to 
+// filewriter allows for multiple goroutines to write concurrently to
 // non-overlapping sections of a file
 type fileWriter struct {
 	f      *os.File

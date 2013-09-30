@@ -2,9 +2,6 @@ GONZBEE
 
 Gonzbee is a command line NZB downloader, written in go
 
-This project is mainly my sandbox in which I write go code. The multiple
-threads of downloading, assembly of files and handling multiple concurrent
-jobs, seemed like a perfect problem space to use the concurrency features in go
+It decodes NZB files, parses yEnc message, can pick out par2 files
+and downloads the files in place.
 
-It is currently functional, but far from pleasant to use. I've been using it
-myself for all my NZB downloading needs, but your mileage may vary.

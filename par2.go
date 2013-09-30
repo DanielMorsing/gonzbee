@@ -18,7 +18,7 @@ var parregexp = regexp.MustCompile(`(?i)\+(\d+).par2$`)
 // if npars is negative, download all blocks.
 func filterPars(nfile *nzb.Nzb, npars int) bool {
 	files := make([]*nzb.File, 0, len(nfile.File))
-	
+
 	type parfile struct {
 		n    int
 		file *nzb.File
@@ -117,4 +117,3 @@ func filterPars(nfile *nzb.Nzb, npars int) bool {
 	nfile.File = files
 	return true
 }
-
