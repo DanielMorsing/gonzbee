@@ -7,20 +7,26 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/DanielMorsing/gonzbee/nntp"
-	"github.com/DanielMorsing/gonzbee/nzb"
-	"github.com/DanielMorsing/gonzbee/yenc"
 	"io"
+	"log"
+	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sync"
+
+	"github.com/DanielMorsing/gonzbee/nntp"
+	"github.com/DanielMorsing/gonzbee/nzb"
+	"github.com/DanielMorsing/gonzbee/yenc"
 )
 
 var (
-	rm      = flag.Bool("rm", false, "Remove the nzb file after downloading")
-	saveDir = flag.String("d", "", "Save to this directory")
-	par     = flag.Int("par", 0, "How many par2 parts to download")
+	rm       = flag.Bool("rm", false, "Remove the nzb file after downloading")
+	saveDir  = flag.String("d", "", "Save to this directory")
+	par      = flag.Int("par", 0, "How many par2 parts to download")
+	profAddr = flag.String("prof", "", "address to open profiling server on")
 )
 
 var extStrip = regexp.MustCompile(`\.nzb$`)
@@ -32,6 +38,16 @@ func main() {
 	if flag.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "No NZB files given")
 		os.Exit(1)
+	}
+
+	if *profAddr != "" {
+		laddr, err := net.Listen("tcp", *profAddr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		go func() {
+			log.Fatalln(http.Serve(laddr, nil))
+		}()
 	}
 
 	if *par != 0 {

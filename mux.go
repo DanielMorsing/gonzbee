@@ -19,13 +19,13 @@ import (
 var (
 	connMu  sync.Mutex
 	connNum int
-	connCh  = make(chan *nntp.Conn, 10)
+	connCh  = make(chan *nntp.Conn, 20)
 )
 
 func getConn() *nntp.Conn {
 	connMu.Lock()
 
-	if connNum < 10 {
+	if connNum < 20 {
 		connNum++
 		go func() {
 			c, err := dialNNTP()
@@ -37,7 +37,7 @@ func getConn() *nntp.Conn {
 					// so it's probably bad creds. error out
 					fmt.Fprintln(os.Stderr, "nntp error:", e)
 				} else {
-					fmt.Fprintln(os.Stderr, e)
+					fmt.Fprintln(os.Stderr, err)
 				}
 				os.Exit(1)
 			}
