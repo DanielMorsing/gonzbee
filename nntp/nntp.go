@@ -7,8 +7,6 @@ package nntp
 
 import (
 	"crypto/tls"
-	"io"
-	"io/ioutil"
 	"net/textproto"
 )
 
@@ -20,7 +18,7 @@ type Conn struct {
 
 //Dial will establish a connection to a NNTP server.
 //It returns the connection and an error, if any
-func Dial(address string) (*Conn, error) {
+func Dial(address, user, pass string) (*Conn, error) {
 	n := new(Conn)
 	var err error
 	n.Conn, err = textproto.Dial("tcp", address)
@@ -32,10 +30,14 @@ func Dial(address string) (*Conn, error) {
 		n.Close()
 		return nil, err
 	}
+	err = n.authenticate(user, pass)
+	if err != nil {
+		return nil, err
+	}
 	return n, nil
 }
 
-func DialTLS(address string) (*Conn, error) {
+func DialTLS(address, user, pass string) (*Conn, error) {
 	n := new(Conn)
 	tlsConn, err := tls.Dial("tcp", address, nil)
 	if err != nil {
@@ -47,12 +49,16 @@ func DialTLS(address string) (*Conn, error) {
 		n.Close()
 		return nil, err
 	}
+	err = n.authenticate(user, pass)
+	if err != nil {
+		return nil, err
+	}
 	return n, nil
 }
 
 //Authenticate will authenticate with the NNTP server, using the supplied
 //username and password. It returns an error, if any
-func (n *Conn) Authenticate(user, pass string) error {
+func (n *Conn) authenticate(user, pass string) error {
 	id, err := n.Cmd("AUTHINFO USER %s", user)
 	if err != nil {
 		return err
@@ -116,36 +122,4 @@ func (n *Conn) GetMessage(msgId string) ([]byte, error) {
 		return nil, err
 	}
 	return n.ReadDotBytes()
-}
-
-type nntpReader struct {
-	conn *Conn
-	io.Reader
-	id uint
-}
-
-func (n *nntpReader) Close() error {
-	//if someone closes midway through a read, we want to consume all the data
-	ioutil.ReadAll(n.Reader)
-	n.conn.EndResponse(n.id)
-	return nil
-}
-
-func (n *Conn) GetMessageReader(msgId string) (io.ReadCloser, error) {
-	id, err := n.Cmd("BODY <%s>", msgId)
-	if err != nil {
-		return nil, err
-	}
-	n.StartResponse(id)
-	_, _, err = n.ReadCodeLine(222)
-	if err != nil {
-		n.EndResponse(id)
-		return nil, err
-	}
-	nntp := &nntpReader{
-		Reader: n.DotReader(),
-		conn:   n,
-		id:     id,
-	}
-	return nntp, nil
 }

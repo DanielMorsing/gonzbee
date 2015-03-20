@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -118,7 +120,11 @@ func downloadFile(dir string, nzbfile *nzb.File) error {
 		return err
 	}
 	for _, f := range nzbfile.Segments {
-		c := getConn()
+		c, err := getConn()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		go decodeMsg(c, file, nzbfile.Groups, f.MsgId)
 	}
 	return nil
@@ -127,20 +133,26 @@ func downloadFile(dir string, nzbfile *nzb.File) error {
 // decodes an nntp message and writes it to a section of the file.
 func decodeMsg(c *nntp.Conn, f *file, groups []string, MsgId string) {
 	var err error
-	defer func() { putConnErr(c, err) }()
 	defer f.Done()
 	err = findGroup(c, groups)
 	if err != nil {
+		putBroken(c)
 		fmt.Fprintln(os.Stderr, "nntp error:", err)
 		return
 	}
-	rc, err := c.GetMessageReader(MsgId)
+	rc, err := c.GetMessage(MsgId)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "nntp error:", err)
+		fmt.Fprintln(os.Stderr, "nntp error getting", MsgId, ":", err)
+		if _, ok := err.(*textproto.Error); ok {
+			putConn(c)
+		} else {
+			putBroken(c)
+		}
 		return
 	}
-	defer rc.Close()
-	yread, err := yenc.NewPart(rc)
+	putConn(c)
+
+	yread, err := yenc.NewPart(bytes.NewReader(rc))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return

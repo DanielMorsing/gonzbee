@@ -7,10 +7,10 @@ package nzb
 import (
 	"bufio"
 	"encoding/xml"
-	"regexp"
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )

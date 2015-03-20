@@ -32,7 +32,7 @@ type Part struct {
 
 type DecodeError string
 
-func(d DecodeError) Error() string {
+func (d DecodeError) Error() string {
 	return string(d)
 }
 

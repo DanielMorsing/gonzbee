@@ -7,65 +7,75 @@
 package main
 
 import (
-	"fmt"
-	"github.com/DanielMorsing/gonzbee/nntp"
-	"github.com/DanielMorsing/gonzbee/yenc"
 	"net"
-	"net/textproto"
-	"os"
 	"sync"
+
+	"github.com/DanielMorsing/gonzbee/nntp"
 )
 
 var (
 	connMu  sync.Mutex
 	connNum int
-	connCh  = make(chan *nntp.Conn, 20)
+	connCh  = make(chan *nntp.Conn, maxNumConn)
 )
 
-func getConn() *nntp.Conn {
-	connMu.Lock()
+const maxNumConn = 20
 
-	if connNum < 20 {
-		connNum++
-		go func() {
-			c, err := dialNNTP()
-			if err != nil {
-				if e, ok := err.(net.Error); ok {
-					fmt.Fprintln(os.Stderr, "Could not connect to server:", e)
-				} else if e, ok := err.(*textproto.Error); ok {
-					// nothing of what we've done so far should error
-					// so it's probably bad creds. error out
-					fmt.Fprintln(os.Stderr, "nntp error:", e)
-				} else {
-					fmt.Fprintln(os.Stderr, err)
-				}
-				os.Exit(1)
-			}
-			connCh <- c
-		}()
+func getConn() (*nntp.Conn, error) {
+	// check if there's a free conn we can get
+	select {
+	case c := <-connCh:
+		return c, nil
+	default:
 	}
+	connMu.Lock()
+	if connNum == maxNumConn {
+		connMu.Unlock()
+		// wait for idle conn
+		select {
+		case c := <-connCh:
+			return c, nil
+		}
+	}
+	connNum++
 	connMu.Unlock()
-	c := <-connCh
-	return c
+	type connerr struct {
+		c   *nntp.Conn
+		err error
+	}
+	ch := make(chan connerr)
+	cancelch := make(chan struct{})
+
+	// dial with this connection.
+	// if we manage to get a connection from
+	// a client  done with theirs, we will use that one
+	// and put the idle conn
+	go func() {
+		c, err := dialNNTP()
+		select {
+		case <-cancelch:
+			if err == nil {
+				putConn(c)
+				return
+			}
+			// ignore error
+			connMu.Lock()
+			connNum--
+			connMu.Unlock()
+		case ch <- connerr{c, err}:
+		}
+	}()
+	select {
+	case ce := <-ch:
+		return ce.c, ce.err
+	case c := <-connCh:
+		close(cancelch)
+		return c, nil
+	}
 }
 
 func putConn(c *nntp.Conn) {
 	connCh <- c
-}
-
-// Invalidate the connection if it's a permanent network error
-func putConnErr(c *nntp.Conn, err error) {
-	switch err.(type) {
-	// these errors are normal errors that don't invalidate the connection.
-	case yenc.DecodeError, *textproto.Error:
-		putConn(c)
-	default:
-		if err != nil {
-			putBroken(c)
-		} else {
-			putConn(c)
-		}
-	}
 }
 
 func putBroken(c *nntp.Conn) {
@@ -80,17 +90,21 @@ func dialNNTP() (*nntp.Conn, error) {
 	var err error
 	var c *nntp.Conn
 
-	if config.TLS {
-		c, err = nntp.DialTLS(dialstr)
-	} else {
-		c, err = nntp.Dial(dialstr)
-	}
-	if err != nil {
-		return nil, err
-	}
-	err = c.Authenticate(config.Username, config.Password)
-	if err != nil {
-		return nil, err
+	for {
+		if config.TLS {
+			c, err = nntp.DialTLS(dialstr, config.Username, config.Password)
+		} else {
+			c, err = nntp.Dial(dialstr, config.Username, config.Password)
+		}
+		if err != nil {
+			// if it's a timeout, ignore and try again
+			e, ok := err.(net.Error)
+			if ok && e.Temporary() {
+				continue
+			}
+			return nil, err
+		}
+		break
 	}
 	return c, nil
 }
