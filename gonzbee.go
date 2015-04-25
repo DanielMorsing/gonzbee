@@ -21,13 +21,14 @@ import (
 
 	"github.com/DanielMorsing/gonzbee/nntp"
 	"github.com/DanielMorsing/gonzbee/nzb"
+	"github.com/DanielMorsing/gonzbee/par2"
 	"github.com/DanielMorsing/gonzbee/yenc"
 )
 
 var (
 	rm       = flag.Bool("rm", false, "Remove the nzb file after downloading")
 	saveDir  = flag.String("d", "", "Save to this directory")
-	par      = flag.Int("par", 0, "How many par2 parts to download")
+	par      = flag.Bool("par", false, "override par2 download logic and download all files")
 	profAddr = flag.String("prof", "", "address to open profiling server on")
 )
 
@@ -52,13 +53,6 @@ func main() {
 		}()
 	}
 
-	if *par != 0 {
-		if flag.NArg() != 1 {
-			*par = 0
-			fmt.Fprintln(os.Stderr, "par option not supported with multiple downloads. Not downloading pars.")
-		}
-	}
-
 	for _, path := range flag.Args() {
 		file, err := os.Open(path)
 		if err != nil {
@@ -72,8 +66,6 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
-
-		filterPars(nzb, *par)
 
 		err = downloadNzb(nzb, extStrip.ReplaceAllString(path, ""))
 		if err != nil {
@@ -102,6 +94,21 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
+	var parfiles map[*nzb.File][]*parfile
+	if !*par {
+		parfiles = filterPars(nzbFile)
+		// first download the parfiles
+		for file, _ := range parfiles {
+			err = downloadFile(dir, file)
+			if err == existErr {
+				continue
+			} else if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		}
+	}
+
+	// download the rest of the files.
 	for _, file := range nzbFile.File {
 		err = downloadFile(dir, file)
 		if err == existErr {
@@ -110,7 +117,66 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 			fmt.Fprintln(os.Stderr, err)
 		}
 	}
+	if *par {
+		return nil
+	}
+
+	// create a list of files downloaded
+	var paths []string
+	for _, file := range nzbFile.File {
+		filename := file.Subject.Filename()
+		path := filepath.Join(dir, filename)
+		paths = append(paths, path)
+	}
+	filewg.Wait()
+	for fp, set := range parfiles {
+		var n int
+		paths, n, err = verifyPar(fp, dir, paths)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			continue
+		}
+		files := selectPars(set, n)
+
+		for _, file := range files {
+			err = downloadFile(dir, file)
+			if err == existErr {
+				continue
+			} else if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		}
+	}
 	return nil
+}
+
+func verifyPar(fp *nzb.File, dir string, paths []string) ([]string, int, error) {
+	filename := fp.Subject.Filename()
+	path := filepath.Join(dir, filename)
+	f, err := os.Open(path)
+	if err != nil {
+		return paths, 0, err
+	}
+	defer f.Close()
+	fset := par2.NewFileset(f)
+	if !fset.CanVerify() {
+		return paths, 0, nil
+	}
+	pathSet := make(map[string]bool)
+	for _, s := range paths {
+		pathSet[s] = true
+	}
+	matches, blockNeeded := fset.Verify(paths)
+	for _, fm := range matches {
+		if pathSet[fm.Path] {
+			delete(pathSet, fm.Path)
+		}
+	}
+	retPaths := make([]string, 0, len(pathSet))
+	for s := range pathSet {
+		retPaths = append(retPaths, s)
+	}
+	return retPaths, blockNeeded, nil
 }
 
 // download a single file contained in an nzb.
