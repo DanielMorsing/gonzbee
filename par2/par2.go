@@ -41,27 +41,25 @@ type chksum struct {
 }
 
 // NewFileset reads r and returns a Fileset that can be used for verification and recovery of the files.
-func NewFileset(r io.Reader) (*Fileset, error) {
+func NewFileset(r io.Reader) *Fileset {
 	fset := &Fileset{}
 	fset.files = make(map[[16]byte]*File)
 	fset.checksums = make(map[[16]byte]chksum)
 	bufr := bufio.NewReader(r)
 	for {
 		hdr, err := readHeader(bufr)
-		if err == io.EOF {
+		if err != nil {
 			break
-		} else if err != nil {
-			return nil, err
 		}
 		if fset.setID == ([16]byte{}) {
 			fset.setID = hdr.setID
 		} else if hdr.setID != fset.setID {
 			// this is weird and shouldn't happen
-			return nil, errors.New("mismatched set ID in one file")
+			return fset
 		}
 		switch hdr.typ {
 		case typeFileDesc:
-			f, id, _ := readFileDesc(hdr, bufr)
+			f, id := readFileDesc(hdr, bufr)
 			if f == nil {
 				continue
 			}
@@ -78,7 +76,7 @@ func NewFileset(r io.Reader) (*Fileset, error) {
 				fset.files[id] = f
 			}
 		case typeIFSC:
-			chksums, id, _ := readIFSC(hdr, bufr)
+			chksums, id := readIFSC(hdr, bufr)
 			if chksums == nil {
 				continue
 			}
@@ -97,7 +95,7 @@ func NewFileset(r io.Reader) (*Fileset, error) {
 				}
 			}
 		case typeMain:
-			slicelen, ids, _ := readMain(hdr, bufr)
+			slicelen, ids := readMain(hdr, bufr)
 			for _, id := range ids {
 				if _, ok := fset.files[id]; !ok {
 					fset.files[id] = new(File)
@@ -107,10 +105,8 @@ func NewFileset(r io.Reader) (*Fileset, error) {
 		default:
 		}
 	}
-	if !fset.CanVerify() {
-		return fset, nil
-	}
-	return fset, nil
+	fset.CanVerify()
+	return fset
 }
 
 // CanVerify returns whether the current fileset can be
@@ -322,10 +318,10 @@ func findHeader(r *bufio.Reader) error {
 	}
 }
 
-func readFileDesc(h hdr, r *bufio.Reader) (f *File, id [16]byte, err error) {
+func readFileDesc(h hdr, r *bufio.Reader) (f *File, id [16]byte) {
 	buf, err := readPkt(h, r)
 	if err != nil {
-		return nil, id, nil
+		return nil, id
 	}
 	f = new(File)
 	id, buf = readmd5(buf)
@@ -339,15 +335,15 @@ func readFileDesc(h hdr, r *bufio.Reader) (f *File, id [16]byte, err error) {
 		buf = buf[:i]
 	}
 	f.Name = string(buf)
-	return f, id, nil
+	return f, id
 }
 
 var zero = []byte{0}
 
-func readIFSC(h hdr, r *bufio.Reader) (ss [][16]byte, id [16]byte, err error) {
+func readIFSC(h hdr, r *bufio.Reader) (ss [][16]byte, id [16]byte) {
 	buf, err := readPkt(h, r)
 	if err != nil {
-		return nil, id, nil
+		return nil, id
 	}
 	id, buf = readmd5(buf)
 	ss = make([][16]byte, 0, len(buf)/20)
@@ -358,13 +354,13 @@ func readIFSC(h hdr, r *bufio.Reader) (ss [][16]byte, id [16]byte, err error) {
 		_, buf = readcrc(buf)
 		ss = append(ss, md5h)
 	}
-	return ss, id, nil
+	return ss, id
 }
 
-func readMain(h hdr, r *bufio.Reader) (slicesize uint64, ids [][16]byte, err error) {
+func readMain(h hdr, r *bufio.Reader) (slicesize uint64, ids [][16]byte) {
 	buf, err := readPkt(h, r)
 	if err != nil {
-		return 0, nil, nil
+		return 0, nil
 	}
 	slicesize, buf = readint(buf)
 	numfiles, buf := readcrc(buf)
@@ -375,7 +371,7 @@ func readMain(h hdr, r *bufio.Reader) (slicesize uint64, ids [][16]byte, err err
 		ids = append(ids, nid)
 	}
 
-	return slicesize, ids, nil
+	return slicesize, ids
 }
 
 func readmd5(b []byte) ([16]byte, []byte) {
