@@ -23,7 +23,6 @@ type Fileset struct {
 
 type File struct {
 	Name      string
-	md5       [16]byte
 	length    uint64
 	checksums [][16]byte
 }
@@ -138,21 +137,21 @@ func (f *Fileset) Verify(paths []string) ([]*FileMatch, int) {
 	if !f.complete {
 		return nil, 0
 	}
-	files := make(map[[16]byte]*File, len(f.files))
+	files := make(map[*File]struct{}, len(f.files))
 	for _, v := range f.files {
-		files[v.md5] = v
+		files[v] = struct{}{}
 	}
 	matches := make([]*FileMatch, 0, len(paths))
 	blocksNeeded := 0
 	for _, s := range paths {
-		fm, blocksmissing := f.verifyfile(files, s)
+		fm, blocksmissing := f.verifyfile(s)
 		if fm != nil && fm.File != nil {
-			delete(files, fm.File.md5)
+			delete(files, fm.File)
 			blocksNeeded += blocksmissing
 			matches = append(matches, fm)
 		}
 	}
-	for _, fi := range files {
+	for fi := range files {
 		matches = append(matches, &FileMatch{Err: ErrMissing, File: fi})
 		blocksNeeded += fi.numBlocks(f)
 	}
@@ -161,65 +160,62 @@ func (f *Fileset) Verify(paths []string) ([]*FileMatch, int) {
 
 var ErrMissing = errors.New("par2: file missing")
 
-func (fset *Fileset) verifyfile(files map[[16]byte]*File, s string) (*FileMatch, int) {
+func (fset *Fileset) verifyfile(s string) (*FileMatch, int) {
 	file, err := os.Open(s)
 	if err != nil {
 		return &FileMatch{Err: err}, 0
 	}
 	defer file.Close()
 
-	chk := md5.New()
-	_, err = io.Copy(chk, file)
-	if err != nil {
-		return &FileMatch{Err: err}, 0
-	}
-	var md5sum [16]byte
-	chk.Sum(md5sum[:0])
-	fi := files[md5sum]
-	if fi != nil {
-		return &FileMatch{Path: s, File: fi}, 0
-	}
-
-	// ok, this file is either corrupted or not part of the recovery set.
-	// Since we're downloading these files via yenc (hopefully), we can always
-	// assume that they will have holes where they were corrupted.
-	_, err = file.Seek(0, os.SEEK_SET)
-	if err != nil {
-		return &FileMatch{Err: err}, 0
-	}
-	partialMatch := &FileMatch{}
+	match := &FileMatch{}
 	for {
 		mdchk := md5.New()
-		_, err := io.CopyN(mdchk, file, int64(fset.slicelen))
+		n, err := io.CopyN(mdchk, file, int64(fset.slicelen))
+		if n == 0 {
+			break
+		}
+		if uint64(n) < fset.slicelen {
+			// we have a partial block. par2 spec says that we should
+			// fill the remainder with 0s
+			// Ugh.
+			for i := uint64(0); i < fset.slicelen-uint64(n); i++ {
+				// can't fail.
+				mdchk.Write(zero)
+			}
+		}
+		var md5sum [16]byte
 		mdchk.Sum(md5sum[:0])
 		if f, ok := fset.checksums[md5sum]; ok {
-			if partialMatch.File == nil {
+			if match.File == nil {
 				// ok we have a match, init the block bitmap
-				partialMatch.blocks = &big.Int{}
-				partialMatch.File = f.File
-				partialMatch.Path = s
-			} else if partialMatch.File != f.File {
-				// shit
+				match.blocks = &big.Int{}
+				match.File = f.File
+				match.Path = s
+			} else if match.File != f.File {
+				// we already decided on one file and now we have
+				// another file with the same block.
+				//
+				// Effort.
 				continue
 			}
-			partialMatch.blocks.SetBit(partialMatch.blocks, f.blockno, 1)
+			match.blocks.SetBit(match.blocks, f.blockno, 1)
 		}
 		if err != nil {
 			break
 		}
 	}
-	if partialMatch.File == nil {
+	if match.File == nil {
 		// not part of the recovery set.
 		return nil, 0
 	}
-	blockcount := partialMatch.File.numBlocks(fset)
+	blockcount := match.File.numBlocks(fset)
 	blocksmissing := 0
 	for i := 0; i < blockcount; i++ {
-		if partialMatch.blocks.Bit(i) == 0 {
+		if match.blocks.Bit(i) == 0 {
 			blocksmissing++
 		}
 	}
-	return partialMatch, blocksmissing
+	return match, blocksmissing
 }
 
 type FileMatch struct {
@@ -333,7 +329,7 @@ func readFileDesc(h hdr, r *bufio.Reader) (f *File, id [16]byte, err error) {
 	}
 	f = new(File)
 	id, buf = readmd5(buf)
-	f.md5, buf = readmd5(buf)
+	_, buf = readmd5(buf)
 	_, buf = readmd5(buf)
 	f.length, buf = readint(buf)
 
