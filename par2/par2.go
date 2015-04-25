@@ -2,36 +2,35 @@ package par2
 
 import (
 	"bufio"
-	"encoding/binary"
-	"fmt"
-	"io"
-	"hash"
-	"crypto/md5"
 	"bytes"
+	"crypto/md5"
+	"encoding/binary"
 	"errors"
+	"fmt"
+	"hash"
+	"io"
 	"math/big"
 	"os"
 )
 
 type Fileset struct {
-	setID [16]byte
-	slicelen uint64
-	complete bool
-	files map[[16]byte]*File
-	checksums map[[16]byte]chksum 
+	setID     [16]byte
+	slicelen  uint64
+	complete  bool
+	files     map[[16]byte]*File
+	checksums map[[16]byte]chksum
 }
 
 type File struct {
-	Name string
-	md5 [16]byte
-	md5_16k [16]byte
-	length uint64
+	Name      string
+	md5       [16]byte
+	length    uint64
 	checksums [][16]byte
 }
 
 func (f *File) numBlocks(fset *Fileset) int {
 	blockcount := int(f.length / fset.slicelen)
-	if f.length % fset.slicelen != 0 {
+	if f.length%fset.slicelen != 0 {
 		blockcount++
 	}
 	return blockcount
@@ -94,7 +93,7 @@ func NewFileset(r io.Reader) (*Fileset, error) {
 			}
 			for i, chk := range fi.checksums {
 				fset.checksums[chk] = chksum{
-					File: fi,
+					File:    fi,
 					blockno: i,
 				}
 			}
@@ -114,7 +113,6 @@ func NewFileset(r io.Reader) (*Fileset, error) {
 	}
 	return fset, nil
 }
-
 
 // CanVerify returns whether the current fileset can be
 // used for verification.
@@ -155,7 +153,7 @@ func (f *Fileset) Verify(paths []string) ([]*FileMatch, int) {
 		}
 	}
 	for _, fi := range files {
-		matches = append(matches, &FileMatch{ Err:ErrMissing, File: fi })
+		matches = append(matches, &FileMatch{Err: ErrMissing, File: fi})
 		blocksNeeded += fi.numBlocks(f)
 	}
 	return matches, blocksNeeded
@@ -169,22 +167,22 @@ func (fset *Fileset) verifyfile(files map[[16]byte]*File, s string) (*FileMatch,
 		return &FileMatch{Err: err}, 0
 	}
 	defer file.Close()
-	
+
 	chk := md5.New()
 	_, err = io.Copy(chk, file)
 	if err != nil {
-		return &FileMatch{Err: err},0
+		return &FileMatch{Err: err}, 0
 	}
 	var md5sum [16]byte
 	chk.Sum(md5sum[:0])
 	fi := files[md5sum]
 	if fi != nil {
-		return &FileMatch{ Path: s, File: fi },0
+		return &FileMatch{Path: s, File: fi}, 0
 	}
-	
+
 	// ok, this file is either corrupted or not part of the recovery set.
 	// Since we're downloading these files via yenc (hopefully), we can always
-	// assume that they will have holes where they were corrupted.	
+	// assume that they will have holes where they were corrupted.
 	_, err = file.Seek(0, os.SEEK_SET)
 	if err != nil {
 		return &FileMatch{Err: err}, 0
@@ -225,17 +223,17 @@ func (fset *Fileset) verifyfile(files map[[16]byte]*File, s string) (*FileMatch,
 }
 
 type FileMatch struct {
-	Err error
-	Path string
-	File *File
+	Err    error
+	Path   string
+	File   *File
 	blocks *big.Int
 }
 
 type hdr struct {
-	length uint64
-	hash   [16]byte
-	setID  [16]byte
-	typ  typ
+	length      uint64
+	hash        [16]byte
+	setID       [16]byte
+	typ         typ
 	partialhash hash.Hash
 }
 
@@ -264,14 +262,14 @@ func readHeader(r *bufio.Reader) (h hdr, err error) {
 	// length after the header has been read.
 	h.length -= 64
 	h.hash, b = readmd5(b)
-	
+
 	// create a partial hash so that we can create a hash of the
 	// entire packet.
 	h.partialhash = md5.New()
 	h.partialhash.Write(b)
-	
+
 	h.setID, b = readmd5(b)
-	
+
 	// i know, it's not an md5sum
 	typbuf, b := readmd5(b)
 	switch typbuf {
@@ -336,9 +334,9 @@ func readFileDesc(h hdr, r *bufio.Reader) (f *File, id [16]byte, err error) {
 	f = new(File)
 	id, buf = readmd5(buf)
 	f.md5, buf = readmd5(buf)
-	f.md5_16k, buf = readmd5(buf)
+	_, buf = readmd5(buf)
 	f.length, buf = readint(buf)
-	
+
 	// rest of block is name, trim 0 padding.
 	i := bytes.LastIndex(buf, zero)
 	if i != -1 {
