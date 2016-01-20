@@ -25,7 +25,7 @@ type Part struct {
 	Number    int
 	end       int64
 	multipart bool
-	br        *bufio.Reader
+	br        readInterface
 	crc       hash.Hash32
 	byteCount int
 }
@@ -36,12 +36,24 @@ func (d DecodeError) Error() string {
 	return string(d)
 }
 
+// the minimal interface that the parser requires
+// for decoding yenc files. Notably implemented by bytes.Buffer
+type readInterface interface {
+	ReadByte() (byte, error)
+	ReadString(delim byte) (line string, err error)
+}
+
 //NewPart finds and parses the yEnc header in the reader and returns a
 //part to use for further decoding.
 func NewPart(r io.Reader) (*Part, error) {
 	y := new(Part)
 
-	y.br = bufio.NewReader(r)
+	br, ok := r.(readInterface)
+	if ok {
+		y.br = br
+	} else {
+		y.br = bufio.NewReader(r)
+	}
 	err := y.findHeader()
 	if err != nil {
 		return nil, err

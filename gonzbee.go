@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	_ "expvar"
 	"flag"
 	"fmt"
 	"io"
@@ -218,7 +219,7 @@ func decodeMsg(c *nntp.Conn, f *file, groups []string, MsgId string) {
 	}
 	putConn(c)
 
-	yread, err := yenc.NewPart(bytes.NewReader(rc))
+	yread, err := yenc.NewPart(bytes.NewBuffer(rc))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
