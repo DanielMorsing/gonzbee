@@ -92,11 +92,15 @@ func (n *Conn) authenticate(user, pass string) error {
 //msgId. It returns the contents of the message and an error, if any
 func (n *Conn) GetMessage(msgId string) ([]byte, error) {
 	id, err := n.Cmd("BODY <%s>", msgId)
+	// A bit of synchronization weirdness. If one of the cmd sends in a pipeline fail
+	// while another is waiting for a response, we want to signal that our response has
+	// been read anyway. This gives waiters in the pipeline the opportunity to wake up
+	// realize the connection is closed
+	n.StartResponse(id)
+	defer n.EndResponse(id)
 	if err != nil {
 		return nil, err
 	}
-	n.StartResponse(id)
-	defer n.EndResponse(id)
 	_, _, err = n.ReadCodeLine(222)
 	if err != nil {
 		return nil, err
