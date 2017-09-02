@@ -31,10 +31,17 @@ var subjectregex = regexp.MustCompile(`"([^"]*)"`)
 
 func (s Subject) Filename() string {
 	n := subjectregex.FindStringSubmatch(string(s))
-	if n == nil {
+	if n != nil {
+		return n[1]
+	}
+	// someone forgot to quote their file name
+	// find the last instance of " (" and return the
+	// entire name
+	i := strings.LastIndex(string(s), " (")
+	if i == -1 {
 		return ""
 	}
-	return n[1]
+	return string(s)[:i]
 }
 
 //File represents a single file in the NZB file.

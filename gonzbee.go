@@ -201,12 +201,6 @@ func downloadFile(dir string, nzbfile *nzb.File) error {
 func decodeMsg(c *nntp.Conn, f *file, groups []string, MsgId string) {
 	var err error
 	defer f.Done()
-	err = findGroup(c, groups)
-	if err != nil {
-		putBroken(c)
-		fmt.Fprintln(os.Stderr, "nntp error:", err)
-		return
-	}
 	rc, err := c.GetMessage(MsgId)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "nntp error getting", MsgId, ":", err)
@@ -229,17 +223,6 @@ func decodeMsg(c *nntp.Conn, f *file, groups []string, MsgId string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
-}
-
-func findGroup(c *nntp.Conn, groups []string) error {
-	var err error
-	for _, g := range groups {
-		err = c.SwitchGroup(g)
-		if err == nil {
-			return nil
-		}
-	}
-	return err
 }
 
 // waitgroup that keeps track if there are any files being downloaded.
