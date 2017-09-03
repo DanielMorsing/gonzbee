@@ -16,10 +16,13 @@ import (
 var (
 	connMu  sync.Mutex
 	connNum int
-	connCh  = make(chan *nntp.Conn, maxNumConn)
+	connCh  = make(chan *nntp.Conn, maxNumConn*pipelineDepth)
 )
 
-const maxNumConn = 20
+const (
+	maxNumConn    = 20
+	pipelineDepth = 10
+)
 
 func getConn() (*nntp.Conn, error) {
 	// check if there's a free conn we can get
@@ -55,7 +58,9 @@ func getConn() (*nntp.Conn, error) {
 		select {
 		case <-cancelch:
 			if err == nil {
-				putConn(c)
+				for i := 0; i < pipelineDepth; i++ {
+					putConn(c)
+				}
 				return
 			}
 			// ignore error
@@ -63,6 +68,9 @@ func getConn() (*nntp.Conn, error) {
 			connNum--
 			connMu.Unlock()
 		case ch <- connerr{c, err}:
+			for i := 0; i < pipelineDepth-1; i++ {
+				putConn(c)
+			}
 		}
 	}()
 	select {
@@ -79,7 +87,10 @@ func putConn(c *nntp.Conn) {
 }
 
 func putBroken(c *nntp.Conn) {
-	c.Close()
+	err := c.Close()
+	if err == nntp.ErrAlreadyClosed {
+		return
+	}
 	connMu.Lock()
 	connNum--
 	connMu.Unlock()

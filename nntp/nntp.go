@@ -7,12 +7,15 @@ package nntp
 
 import (
 	"crypto/tls"
+	"errors"
 	"net/textproto"
+	"sync/atomic"
 )
 
 //Conn represents a NNTP connection
 type Conn struct {
 	*textproto.Conn
+	closed uint32
 }
 
 //Dial will establish a connection to a NNTP server.
@@ -107,3 +110,12 @@ func (n *Conn) GetMessage(msgId string) ([]byte, error) {
 	}
 	return n.ReadDotBytes()
 }
+
+func (n *Conn) Close() error {
+	if atomic.CompareAndSwapUint32(&n.closed, 0, 1) {
+		return n.Conn.Close()
+	}
+	return ErrAlreadyClosed
+}
+
+var ErrAlreadyClosed = errors.New("conn already closed")
