@@ -176,6 +176,13 @@ func verifyPar(fp *nzb.File, dir string, paths []string) ([]string, int, error) 
 	for _, fm := range matches {
 		if pathSet[fm.Path] {
 			delete(pathSet, fm.Path)
+			par2path := filepath.Join(dir, fm.File.Name)
+			if par2path != fm.Path {
+				err := os.Rename(fm.Path, par2path)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+				}
+			}
 		}
 	}
 	retPaths := make([]string, 0, len(pathSet))
