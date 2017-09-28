@@ -69,8 +69,8 @@ func NewFileset(r io.Reader) *Fileset {
 					// file was discovered through some means
 					// that didn't include the file info, usually IFSC
 					// pkt. Fill in the information now that we know what file this is.
-					f.checksums = fi.checksums
-					fset.files[id] = f
+					fi.Name = f.Name
+					fi.length = fi.length
 				}
 			} else {
 				fset.files[id] = f
