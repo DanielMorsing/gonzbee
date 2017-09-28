@@ -330,10 +330,7 @@ func readFileDesc(h hdr, r *bufio.Reader) (f *File, id [16]byte) {
 	f.length, buf = readint(buf)
 
 	// rest of block is name, trim 0 padding.
-	i := bytes.LastIndex(buf, zero)
-	if i != -1 {
-		buf = buf[:i]
-	}
+	buf = bytes.TrimRight(buf, "\x00")
 	f.Name = string(buf)
 	return f, id
 }
