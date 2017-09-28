@@ -29,7 +29,7 @@ import (
 var (
 	rm       = flag.Bool("rm", false, "Remove the nzb file after downloading")
 	saveDir  = flag.String("d", "", "Save to this directory")
-	par      = flag.Bool("par", false, "override par2 download logic and download all files")
+	par      = flag.Bool("par", false, "only download par2 files")
 	profAddr = flag.String("prof", "", "address to open profiling server on")
 )
 
@@ -95,20 +95,28 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
-	var parfiles map[*nzb.File][]*parfile
-	if !*par {
-		parfiles = filterPars(nzbFile)
-		// first download the parfiles
-		for file, _ := range parfiles {
-			err = downloadFile(dir, file)
-			if err == existErr {
-				continue
-			} else if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-			}
+	parfiles := filterPars(nzbFile)
+	// first download the parfiles
+	for file, _ := range parfiles {
+		err = downloadFile(dir, file)
+		if err == existErr {
+			continue
+		} else if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 		}
 	}
 
+	if *par {
+		for _, pfiles := range parfiles {
+			for _, f := range pfiles {
+				err := downloadFile(dir, f.file)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+				}
+			}
+		}
+		return nil
+	}
 	// download the rest of the files.
 	for _, file := range nzbFile.File {
 		err = downloadFile(dir, file)
@@ -117,9 +125,6 @@ func downloadNzb(nzbFile *nzb.Nzb, dir string) error {
 		} else if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
-	}
-	if *par {
-		return nil
 	}
 
 	// create a list of files downloaded
